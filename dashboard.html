@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Dashboard - Mi Huellita</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D4E37',
+                        secondary: '#F5E6D3',
+                        accent: '#E8985E',
+                        success: '#6B9B7A',
+                        error: '#C75D5D',
+                        background: '#FDF8F3',
+                    },
+                    fontFamily: {
+                        heading: ['Nunito', 'sans-serif'],
+                        body: ['Open Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-background font-body">
+    <header class="bg-primary text-white shadow-lg">
+        <nav class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <a href="dashboard.html" class="flex items-center gap-2">
+                    <div class="w-10 h-10 bg-accent rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                        </svg>
+                    </div>
+                    <span class="font-heading font-bold text-xl">Mi Huellita</span>
+                </a>
+                <div class="flex items-center gap-4">
+                    <a href="solidary.html" class="text-secondary hover:text-accent transition-colors hidden md:block">Sección Solidaria</a>
+                    <div class="relative">
+                        <button id="user-menu-btn" class="flex items-center gap-2 hover:bg-primary/80 px-3 py-2 rounded-lg transition-colors">
+                            <div id="user-avatar" class="w-8 h-8 bg-accent rounded-full flex items-center justify-center text-white font-bold">
+                                U
+                            </div>
+                            <span id="user-name" class="hidden md:inline">Usuario</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50">
+                            <button id="logout-btn" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Cerrar Sesión</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <div id="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+            <p class="mt-4 text-gray-600">Cargando...</p>
+        </div>
+
+        <div id="content" class="hidden">
+            <div id="owner-dashboard">
+                <div class="flex justify-between items-center mb-8">
+                    <h1 class="font-heading font-bold text-3xl text-primary">Mis Mascotas</h1>
+                    <button id="add-pet-btn" class="bg-accent hover:bg-orange-500 text-white px-4 py-2 rounded-lg font-heading font-semibold transition-colors flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Agregar Mascota
+                    </button>
+                </div>
+
+                <div id="pets-grid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                </div>
+
+                <div id="no-pets" class="hidden text-center py-12">
+                    <div class="w-24 h-24 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-12 h-12 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                    </div>
+                    <h2 class="font-heading font-bold text-xl text-primary mb-2">No tienes mascotas aún</h2>
+                    <p class="text-gray-600 mb-4">Agrega tu primera mascota para comenzar</p>
+                    <button onclick="document.getElementById('add-pet-btn').click()" class="bg-accent hover:bg-orange-500 text-white px-6 py-2 rounded-lg font-heading font-semibold transition-colors">
+                        Agregar Mi Primera Mascota
+                    </button>
+                </div>
+            </div>
+
+            <div id="vet-dashboard" class="hidden">
+                <h1 class="font-heading font-bold text-3xl text-primary mb-8">Acceso a Mascotas</h1>
+                
+                <div class="max-w-md mx-auto">
+                    <div class="bg-white rounded-xl shadow-lg p-6">
+                        <h2 class="font-heading font-bold text-xl text-primary mb-4">Ingresar PIN</h2>
+                        <p class="text-gray-600 mb-4">El dueño de la mascota te debe proporcionar un PIN de 6 dígitos para acceder a su historial.</p>
+                        <form id="pin-form" class="space-y-4">
+                            <div>
+                                <input
+                                    type="text"
+                                    id="pin-input"
+                                    maxlength="6"
+                                    pattern="[0-9]{6}"
+                                    class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-center text-2xl font-mono tracking-widest focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                                    placeholder="000000"
+                                >
+                            </div>
+                            <button
+                                type="submit"
+                                class="w-full bg-success hover:bg-green-700 text-white font-heading font-semibold py-3 px-4 rounded-lg transition-colors"
+                            >
+                                Validar PIN
+                            </button>
+                        </form>
+                    </div>
+
+                    <div id="vet-access-history" class="mt-8">
+                        <h3 class="font-heading font-bold text-lg text-primary mb-4">Accesos Recientes</h3>
+                        <div id="access-history-list" class="space-y-3">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="shelter-dashboard" class="hidden">
+                <div class="flex justify-between items-center mb-8">
+                    <h1 class="font-heading font-bold text-3xl text-primary">Gestión del Refugio</h1>
+                    <div class="flex gap-2">
+                        <button id="add-adoption-btn" class="bg-accent hover:bg-orange-500 text-white px-4 py-2 rounded-lg font-heading font-semibold transition-colors flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Agregar para Adopción
+                        </button>
+                    </div>
+                </div>
+
+                <div id="shelter-info" class="bg-white rounded-xl shadow-lg p-6 mb-8">
+                    <h2 class="font-heading font-bold text-xl text-primary mb-4">Datos del Refugio</h2>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm text-gray-500">Nombre</label>
+                            <p id="shelter-name-display" class="font-semibold">-</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500">Ciudad</label>
+                            <p id="shelter-city-display" class="font-semibold">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 class="font-heading font-bold text-xl text-primary mb-4">Mascotas en Adopción</h2>
+                <div id="adoption-pets-grid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                </div>
+            </div>
+
+            <div id="admin-dashboard" class="hidden">
+                <h1 class="font-heading font-bold text-3xl text-primary mb-8">Panel de Administración</h1>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-xl shadow-lg p-6">
+                        <h2 class="font-heading font-bold text-xl text-primary mb-4">Estadísticas</h2>
+                        <div class="space-y-3">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Total Usuarios</span>
+                                <span id="total-users" class="font-bold">0</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Total Mascotas</span>
+                                <span id="total-pets" class="font-bold">0</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Total Registros Médicos</span>
+                                <span id="total-records" class="font-bold">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="modal-container"></div>
+
+    <footer class="bg-primary text-white py-4 mt-12">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm text-gray-300">Desarrollado por <strong>AFM Solutions</strong></p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/owner.js"></script>
+    <script src="js/vet.js"></script>
+    <script src="js/public.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const { supabase } = createSupabaseClient();
+            const { handleLogout, getCurrentUser } = authModule(supabase);
+
+            const user = await getCurrentUser();
+            if (!user) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('content').classList.remove('hidden');
+
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+
+            const displayName = profile?.full_name || user.email?.split('@')[0] || 'Usuario';
+            document.getElementById('user-name').textContent = displayName;
+            document.getElementById('user-avatar').textContent = displayName.charAt(0).toUpperCase();
+
+            document.getElementById('logout-btn').addEventListener('click', handleLogout);
+
+            const userMenuBtn = document.getElementById('user-menu-btn');
+            const userDropdown = document.getElementById('user-dropdown');
+            userMenuBtn.addEventListener('click', () => {
+                userDropdown.classList.toggle('hidden');
+            });
+            document.addEventListener('click', (e) => {
+                if (!userMenuBtn.contains(e.target)) {
+                    userDropdown.classList.add('hidden');
+                }
+            });
+
+            const role = profile?.role || 'owner';
+
+            if (role === 'owner') {
+                document.getElementById('owner-dashboard').classList.remove('hidden');
+                const { loadPets, initOwner } = ownerModule(supabase, user.id);
+                await initOwner();
+            } else if (role === 'vet') {
+                document.getElementById('vet-dashboard').classList.remove('hidden');
+                const { initVet } = vetModule(supabase, user.id);
+                initVet();
+            } else if (role === 'shelter') {
+                document.getElementById('shelter-dashboard').classList.remove('hidden');
+                const { loadShelterPets } = publicModule(supabase);
+                await loadShelterPets(user.id);
+            } else if (role === 'admin') {
+                document.getElementById('admin-dashboard').classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

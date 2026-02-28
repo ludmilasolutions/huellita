@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sección Solidaria - Mi Huellita</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D4E37',
+                        secondary: '#F5E6D3',
+                        accent: '#E8985E',
+                        success: '#6B9B7A',
+                        error: '#C75D5D',
+                        background: '#FDF8F3',
+                    },
+                    fontFamily: {
+                        heading: ['Nunito', 'sans-serif'],
+                        body: ['Open Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-background font-body">
+    <header class="bg-primary text-white shadow-lg">
+        <nav class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <a href="index.html" class="flex items-center gap-2">
+                    <div class="w-10 h-10 bg-accent rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                        </svg>
+                    </div>
+                    <span class="font-heading font-bold text-xl">Mi Huellita</span>
+                </a>
+                <div class="flex items-center gap-4">
+                    <a href="adopt.html" class="text-secondary hover:text-accent transition-colors">Adoptar</a>
+                    <a href="login.html" class="bg-accent hover:bg-orange-500 px-4 py-2 rounded-lg font-heading font-semibold transition-colors">Iniciar Sesión</a>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <div class="text-center mb-12">
+            <h1 class="font-heading font-extrabold text-4xl text-primary mb-4">Sección Solidaria</h1>
+            <p class="text-lg text-gray-600 max-w-2xl mx-auto">
+                Conecta con refugios, ayuda con donaciones directas y sé parte de esta cadena de amor hacia los animales.
+            </p>
+        </div>
+
+        <section class="mb-16">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="font-heading font-bold text-2xl text-primary">Refugios</h2>
+                <a href="register.html?role=shelter" class="text-accent hover:underline font-semibold">Registrar mi refugio</a>
+            </div>
+            <div id="shelters-grid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="bg-white rounded-xl shadow-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+                    <div class="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+                    <div class="h-3 bg-gray-200 rounded w-full"></div>
+                </div>
+                <div class="bg-white rounded-xl shadow-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+                    <div class="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+                    <div class="h-3 bg-gray-200 rounded w-full"></div>
+                </div>
+                <div class="bg-white rounded-xl shadow-lg p-6 animate-pulse">
+                    <div class="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+                    <div class="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+                    <div class="h-3 bg-gray-200 rounded w-full"></div>
+                </div>
+            </div>
+            <div id="no-shelters" class="hidden text-center py-12">
+                <p class="text-gray-600">No hay refugios registrados aún.</p>
+            </div>
+        </section>
+
+        <section class="mb-16">
+            <h2 class="font-heading font-bold text-2xl text-primary mb-6">Casos Urgentes</h2>
+            <div id="urgent-pets" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+            <div id="no-urgent" class="hidden text-center py-12">
+                <p class="text-gray-600">No hay casos urgentes en este momento.</p>
+            </div>
+        </section>
+
+        <section class="bg-secondary rounded-2xl p-8 mb-16">
+            <div class="max-w-3xl mx-auto text-center">
+                <div class="w-16 h-16 bg-accent rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                    </svg>
+                </div>
+                <h2 class="font-heading font-bold text-2xl text-primary mb-4">¿Quieres ayudar?</h2>
+                <p class="text-gray-600 mb-6">
+                    Puedes contactar directamente con los refugios para hacer donaciones, ser voluntario o adoptar.
+                    <strong>Mi Huellita no interviene en las transacciones</strong>, todo es directo entre tú y el refugio.
+                </p>
+                <div class="flex flex-wrap justify-center gap-4">
+                    <a href="register.html?role=shelter" class="bg-primary hover:bg-brown-800 text-white px-6 py-3 rounded-lg font-heading font-semibold transition-colors">
+                        Registrar mi Refugio
+                    </a>
+                    <a href="adopt.html" class="bg-success hover:bg-green-700 text-white px-6 py-3 rounded-lg font-heading font-semibold transition-colors">
+                        Ver Mascotas en Adopción
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="font-heading font-bold text-2xl text-primary mb-6">Voluntarios</h2>
+            <div id="volunteers-list" class="space-y-4">
+            </div>
+            <div id="no-volunteers" class="hidden text-center py-12">
+                <p class="text-gray-600">No hay voluntarios registrados aún.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-primary text-white py-8">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-accent rounded-full flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                        </svg>
+                    </div>
+                    <span class="font-heading font-bold">Mi Huellita</span>
+                </div>
+                <p class="text-sm text-gray-300">Desarrollado por <strong>AFM Solutions</strong></p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/public.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const { supabase } = createSupabaseClient();
+            const { loadShelters, loadUrgentPets, loadVolunteers } = publicModule(supabase);
+
+            await Promise.all([
+                loadShelters(),
+                loadUrgentPets(),
+                loadVolunteers()
+            ]);
+        });
+    </script>
+</body>
+</html>

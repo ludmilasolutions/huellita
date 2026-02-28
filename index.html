@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Huellita - La historia de tu mascota, siempre contigo</title>
+    <meta name="description" content="Historial clínico digital para mascotas. Controlado por el dueño, alimentado por veterinarias verificadas.">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#5D4E37">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D4E37',
+                        secondary: '#F5E6D3',
+                        accent: '#E8985E',
+                        success: '#6B9B7A',
+                        error: '#C75D5D',
+                        background: '#FDF8F3',
+                    },
+                    fontFamily: {
+                        heading: ['Nunito', 'sans-serif'],
+                        body: ['Open Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-background font-body">
+    <header class="bg-primary text-white shadow-lg">
+        <nav class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <a href="index.html" class="flex items-center gap-2">
+                    <div class="w-10 h-10 bg-accent rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                        </svg>
+                    </div>
+                    <span class="font-heading font-bold text-xl">Mi Huellita</span>
+                </a>
+                <div class="flex items-center gap-4">
+                    <a href="solidary.html" class="text-secondary hover:text-accent transition-colors">Sección Solidaria</a>
+                    <a href="login.html" class="bg-accent hover:bg-orange-500 px-4 py-2 rounded-lg font-heading font-semibold transition-colors">Iniciar Sesión</a>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero py-20">
+            <div class="container mx-auto px-4 text-center">
+                <h1 class="font-heading font-extrabold text-4xl md:text-5xl text-primary mb-6">
+                    La historia de tu mascota,<br>
+                    <span class="text-accent">siempre contigo</span>
+                </h1>
+                <p class="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
+                    Historial clínico digital universal para mascotas, controlado por el dueño y alimentado únicamente por veterinarias verificadas.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <a href="register.html?role=owner" class="bg-primary hover:bg-brown-800 text-white px-8 py-3 rounded-lg font-heading font-semibold text-lg transition-colors shadow-lg">
+                        Soy Dueño de Mascota
+                    </a>
+                    <a href="register.html?role=vet" class="bg-success hover:bg-green-700 text-white px-8 py-3 rounded-lg font-heading font-semibold text-lg transition-colors shadow-lg">
+                        Soy Veterinaria
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <section class="features py-16 bg-white">
+            <div class="container mx-auto px-4">
+                <h2 class="font-heading font-bold text-3xl text-primary text-center mb-12">¿Por qué usar Mi Huellita?</h2>
+                <div class="grid md:grid-cols-3 gap-8">
+                    <div class="feature-card text-center p-6">
+                        <div class="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                        </div>
+                        <h3 class="font-heading font-bold text-xl text-primary mb-2">Seguro y Confiable</h3>
+                        <p class="text-gray-600">Solo veterinarias verificadas pueden agregar información médica. Tú контролируешь quién accede a los datos.</p>
+                    </div>
+                    <div class="feature-card text-center p-6">
+                        <div class="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                        </div>
+                        <h3 class="font-heading font-bold text-xl text-primary mb-2">Sistema PIN</h3>
+                        <p class="text-gray-600">Genera un PIN temporal de 6 dígitos para que tu veterinaria acceda a los datos de tu mascota.</p>
+                    </div>
+                    <div class="feature-card text-center p-6">
+                        <div class="w-16 h-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                            </svg>
+                        </div>
+                        <h3 class="font-heading font-bold text-xl text-primary mb-2">Sección Solidaria</h3>
+                        <p class="text-gray-600">Conecta con refugios, adopta responsablemente y ayuda con donaciones directas.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cta py-16 bg-secondary">
+            <div class="container mx-auto px-4 text-center">
+                <h2 class="font-heading font-bold text-3xl text-primary mb-4">¿Listo para comenzar?</h2>
+                <p class="text-gray-600 mb-8">Únete a miles de dueños que ya protegen la salud de sus mascotas</p>
+                <a href="register.html" class="bg-accent hover:bg-orange-500 text-white px-8 py-3 rounded-lg font-heading font-semibold text-lg transition-colors shadow-lg inline-block">
+                    Crear Mi Cuenta
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-primary text-white py-8">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-accent rounded-full flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                        </svg>
+                    </div>
+                    <span class="font-heading font-bold">Mi Huellita</span>
+                </div>
+                <p class="text-sm text-gray-300">Desarrollado por <strong>AFM Solutions</strong></p>
+                <div class="flex gap-4">
+                    <a href="solidary.html" class="text-gray-300 hover:text-white transition-colors">Sección Solidaria</a>
+                    <a href="adopt.html" class="text-gray-300 hover:text-white transition-colors">Adoptar</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-client.js"></script>
+</body>
+</html>

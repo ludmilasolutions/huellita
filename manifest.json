@@ -1,0 +1,27 @@
+{
+    "name": "Mi Huellita",
+    "short_name": "Mi Huellita",
+    "description": "La historia de tu mascota, siempre contigo",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#FDF8F3",
+    "theme_color": "#5D4E37",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect fill='%23E8985E' width='192' height='192' rx='32'/%3E%3Cpath fill='white' d='M96 32c-35.3 0-64 28.7-64 64s28.7 64 64 64 64-28.7 64-64-28.7-64-64-64zm-8 107.9c-26.3-3.3-46.7-25.7-46.7-43.9 0-4.1.5-8.1 1.4-11.9L60 100v6.7c0 7.3 6 13.3 13.3 13.3v12.9zm46-17.1c-1.7-5.4-6.7-9.3-12.7-9.3h-6.7v-20c0-3.7-3-6.7-6.7-6.7H53.3v-13.3h13.3c3.7 0 6.7-3 6.7-6.7V46.7h13.3c7.3 0 13.3-6 13.3-13.3V26.7c19.5 7.9 33.3 27 33.3 49.3 0 13.9-5.3 26.5-14 36z'/%3E%3C/svg%3E",
+            "sizes": "192x192",
+            "type": "image/svg+xml"
+        },
+        {
+            "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect fill='%23E8985E' width='512' height='512' rx='64'/%3E%3Cpath fill='white' d='M256 64c-106 0-192 86-192 192s86 192 192 192 192-86 192-192S362 64 256 64zm-24 323.7c-78.8-9.8-140-77-140-131.6 0-12.3 1.6-24.2 4.2-35.6L180 300v20c0 21.9 17.9 39.8 39.8 39.8v38.6zm138-51.2c-5.2-16.2-20-27.8-38-27.8H280v-60c0-11-9-20-20-20H200v-40h40c11 0 20-9 20-20v-40h40c22 0 40-18 40-40V120c58.6 23.8 100 81 100 148 0 41.6-16 79.4-42 108z'/%3E%3C/svg%3E",
+            "sizes": "512x512",
+            "type": "image/svg+xml"
+        }
+    ],
+    "categories": ["medical", "pets", "lifestyle"],
+    "lang": "es-AR",
+    "dir": "ltr",
+    "scope": "/",
+    "prefer_related_applications": false
+}
