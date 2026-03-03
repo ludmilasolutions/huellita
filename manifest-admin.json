@@ -1,15 +1,15 @@
 {
-  "name": "AFM Orders - Pedidos Online",
-  "short_name": "AFM Orders",
-  "description": "AFM Orders - Sistema de pedidos online. Envío a domicilio y retiro en local.",
-  "start_url": "/index.html?v=4",
+  "name": "AFM Orders - Panel Admin",
+  "short_name": "AFM Admin",
+  "description": "Panel de administración de AFM Orders",
+  "start_url": "/admin.html?v=2",
   "display": "standalone",
-  "background_color": "#3B82F6",
-  "theme_color": "#3B82F6",
-  "orientation": "portrait",
+  "background_color": "#1e40af",
+  "theme_color": "#1e40af",
+  "orientation": "any",
   "scope": "/",
   "lang": "es-AR",
-  "categories": ["food", "shopping"],
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "logo.png?v=2",
@@ -60,34 +60,20 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "screenshot1.png",
-      "sizes": "720x1280",
-      "type": "image/png",
-      "form_factor": "narrow"
-    },
-    {
-      "src": "screenshot2.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide"
-    }
-  ],
   "shortcuts": [
     {
-      "name": "Hacer pedido",
-      "short_name": "Pedir",
-      "description": "Realizar un nuevo pedido",
-      "url": "/index.html?v=3",
+      "name": "Ver pedidos",
+      "short_name": "Pedidos",
+      "description": "Ver todos los pedidos",
+      "url": "/admin.html?v=1#orders",
       "icons": [{ "src": "logo.png?v=2", "sizes": "96x96" }]
     },
     {
-      "name": "Ver carrito",
-      "short_name": "Carrito",
-      "description": "Ver mi carrito actual",
-      "url": "/index.html?v=3#cart",
-      "icons": [{ "src": "cart-icon.png", "sizes": "96x96" }]
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Ver panel de control",
+      "url": "/admin.html?v=1#dashboard",
+      "icons": [{ "src": "logo.png?v=2", "sizes": "96x96" }]
     }
   ]
 }

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Productos - EL TACHI</title>
+    
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="firebase-to-supabase-adapter.js"></script>
+    <script src="supabase-config.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; border-radius: 20px; padding: 30px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        h1 { color: #1e40af; margin-bottom: 20px; text-align: center; }
+        .btn { padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #1e40af; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        textarea { width: 100%; height: 400px; padding: 15px; border: 2px solid #e5e7eb; border-radius: 10px; font-family: monospace; font-size: 13px; resize: vertical; }
+        textarea:focus { outline: none; border-color: #3b82f6; }
+        .status { padding: 15px; border-radius: 10px; margin-bottom: 20px; display: none; }
+        .status.success { background: #d1fae5; color: #065f46; display: block; }
+        .status.error { background: #fee2e2; color: #991b1b; display: block; }
+        .status.loading { background: #dbeafe; color: #1e40af; display: block; }
+        .info { background: #fef3c7; padding: 15px; border-radius: 10px; margin-bottom: 20px; color: #92400e; }
+        .format-info { background: #f3f4f6; padding: 15px; border-radius: 10px; margin-top: 20px; font-size: 13px; color: #6b7280; }
+        .format-info code { background: #e5e7eb; padding: 2px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i class="fas fa-boxes"></i> Gestión de Productos</h1>
+        
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="exportProducts()">
+                <i class="fas fa-download"></i> Exportar Productos
+            </button>
+            <button class="btn btn-success" onclick="importProducts()">
+                <i class="fas fa-upload"></i> Importar Productos
+            </button>
+            <button class="btn btn-danger" onclick="clearText()">
+                <i class="fas fa-trash"></i> Limpiar
+            </button>
+        </div>
+        
+        <div id="status" class="status"></div>
+        
+        <textarea id="productData" placeholder="Los productos se mostrarán aquí en formato de texto..."></textarea>
+        
+        <div class="format-info">
+            <strong>Formato:</strong><br>
+            Cada producto en una línea:<br>
+            <code>Nombre | Descripción | Precio | Categoría | Disponible</code><br><br>
+            <strong>Categorías disponibles:</strong> <span id="categoriesList">Cargando...</span><br>
+            <strong>Disponibles:</strong> disponible / no disponible
+        </div>
+    </div>
+
+    <script>
+        let supabaseClient = null;
+        
+        async function init() {
+            const result = await initSupabase();
+            if (result) {
+                supabaseClient = result.supabase;
+                loadCategories();
+            }
+        }
+        
+        // Mostrar estado
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+        }
+        
+        // Cargar categorías
+        async function loadCategories() {
+            try {
+                const { data, error } = await supabaseClient.from('categories').select('*').order('orden');
+                if (error) throw error;
+                
+                const allCategories = data.map(doc => doc.nombre);
+                document.getElementById('categoriesList').textContent = allCategories.join(', ');
+            } catch (error) {
+                console.error('Error cargando categorías:', error);
+            }
+        }
+        
+        // Exportar productos
+        async function exportProducts() {
+            showStatus('Exportando productos...', 'loading');
+            
+            try {
+                const { data: categories, error: catError } = await supabaseClient.from('categories').select('*');
+                if (catError) throw catError;
+                
+                const categoriesMap = {};
+                categories.forEach(doc => {
+                    categoriesMap[doc.id] = doc.nombre;
+                });
+                
+                const { data: products, error } = await supabaseClient.from('products').select('*');
+                if (error) throw error;
+                
+                const productLines = products.map(data => {
+                    let catName = data.categoria || '';
+                    if (catName && categoriesMap[catName]) {
+                        catName = categoriesMap[catName];
+                    }
+                    return `${data.nombre} | ${data.descripcion || ''} | ${data.precio} | ${catName} | ${data.disponible ? 'disponible' : 'no disponible'}`;
+                });
+                
+                document.getElementById('productData').value = productLines.join('\n');
+                showStatus(`${products.length} productos exportados`, 'success');
+            } catch (error) {
+                showStatus('Error al exportar: ' + error.message, 'error');
+            }
+        }
+        
+        // Importar productos
+        async function importProducts() {
+            const text = document.getElementById('productData').value.trim();
+            if (!text) {
+                showStatus('No hay datos para importar', 'error');
+                return;
+            }
+            
+            const { data: categories, error: catError } = await supabaseClient.from('categories').select('*');
+            if (catError) throw catError;
+            
+            const categoriesMap = {};
+            categories.forEach(doc => {
+                categoriesMap[doc.nombre.toLowerCase()] = doc.id;
+            });
+            
+            const lines = text.split('\n').filter(line => line.trim());
+            showStatus(`Importando ${lines.length} productos...`, 'loading');
+            
+            let success = 0;
+            let errors = [];
+            
+            for (const line of lines) {
+                const parts = line.split('|').map(p => p.trim());
+                
+                if (parts.length < 4) {
+                    errors.push(`Línea inválida: ${line}`);
+                    continue;
+                }
+                
+                const [nombre, descripcion, precio, categoria, disponible] = parts;
+                
+                const { data: existing } = await supabaseClient.from('products')
+                    .select('id')
+                    .eq('nombre', nombre)
+                    .limit(1);
+                
+                let categoriaId = categoria?.toLowerCase().trim();
+                let catId = categoriesMap[categoriaId] || categoria;
+                
+                const productData = {
+                    nombre: nombre,
+                    descripcion: descripcion || '',
+                    precio: parseFloat(precio) || 0,
+                    categoria: catId || categoria,
+                    disponible: disponible?.toLowerCase() === 'disponible',
+                    fecha_actualizacion: new Date().toISOString()
+                };
+                
+                try {
+                    if (existing && existing.length > 0) {
+                        await supabaseClient.from('products').update(productData).eq('id', existing[0].id);
+                    } else {
+                        await supabaseClient.from('products').insert(productData);
+                    }
+                    success++;
+                } catch (e) {
+                    errors.push(`Error con ${nombre}: ${e.message}`);
+                }
+            }
+            
+            if (errors.length > 0) {
+                showStatus(`Importados: ${success}, Errores: ${errors.length}`, 'error');
+                console.log(errors);
+            } else {
+                showStatus(`${success} productos importados correctamente`, 'success');
+            }
+        }
+        
+        // Limpiar texto
+        function clearText() {
+            document.getElementById('productData').value = '';
+            showStatus('', '');
+        }
+        
+        // Inicializar
+        init();
+    </script>
+</body>
+</html>

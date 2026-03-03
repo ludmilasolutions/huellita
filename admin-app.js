@@ -1,0 +1,2927 @@
+// Panel Admin - EL TACHI
+// Sistema de administración para pedidos gastronómicos con actualización en tiempo real
+
+// Estado global del panel admin
+const adminState = {
+    currentUser: null,
+    isAdmin: false,
+    orders: [],
+    filteredOrders: [],
+    products: [],
+    filteredProducts: [],
+    categories: [],
+    settings: null,
+    currentTab: 'dashboard',
+    currentFilter: 'hoy',
+    stats: {
+        todayOrders: 0,
+        todaySales: 0,
+        activeOrders: 0
+    },
+    lastOrderId: null,
+    realtimeEnabled: true,
+    productSearchTerm: '',
+    notifiedOrderIds: new Set(), // IDs de pedidos ya notificados con sonido
+    initialLoadComplete: false // Flag para evitar notificaciones en carga inicial
+};
+// Init guard: ensure initialization runs once per page load
+let adminAppInitialized = false;
+
+// FUNCIONES DE UTILIDAD (definidas primero)
+function showNotification(message, type = 'info') {
+    // Eliminar notificaciones anteriores
+    document.querySelectorAll('[data-notification]').forEach(el => {
+        el.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => el.remove(), 300);
+    });
+    
+    // Crear elemento de notificación
+    const notification = document.createElement('div');
+    notification.setAttribute('data-notification', 'true');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : type === 'warning' ? '#f59e0b' : '#3b82f6'};
+        color: white;
+        padding: 15px 20px;
+        border-radius: 10px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+        max-width: 350px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 600;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.1);
+        cursor: pointer;
+    `;
+    
+    const icon = type === 'success' ? 'fa-check-circle' : 
+                type === 'error' ? 'fa-exclamation-circle' : 
+                type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle';
+    
+    notification.innerHTML = `
+        <i class="fas ${icon}" style="font-size: 1.3rem;"></i>
+        <div style="flex: 1;">${message}</div>
+        <button onclick="this.parentElement.remove()" style="background: none; border: none; color: white; cursor: pointer; opacity: 0.7; padding: 4px;">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    // Cerrar al hacer clic
+    notification.addEventListener('click', (e) => {
+        if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+            notification.remove();
+        }
+    });
+    
+    document.body.appendChild(notification);
+    
+    // Remover después de 6 segundos
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }
+    }, 6000);
+}
+
+function showError(message, element = null) {
+    if (element) {
+        element.textContent = message;
+        element.style.display = 'block';
+    } else {
+        showNotification(message, 'error');
+    }
+}
+
+function hideError(element) {
+    if (element) {
+        element.style.display = 'none';
+    }
+}
+
+function showLoading(show) {
+    const loadingElement = document.getElementById('loadingOverlay');
+    if (show) {
+        if (!loadingElement) {
+            const overlay = document.createElement('div');
+            overlay.id = 'loadingOverlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(255,255,255,0.9);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 9998;
+                backdrop-filter: blur(3px);
+            `;
+            overlay.innerHTML = `
+                <div style="text-align: center; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
+                    <div style="width: 50px; height: 50px; border: 3px solid #e5e7eb; border-top-color: #1e40af; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <p style="margin-top: 15px; color: #6b7280; font-weight: 600;">Cargando...</p>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+        }
+    } else {
+        if (loadingElement) {
+            loadingElement.remove();
+        }
+    }
+}
+
+function getStatusClass(status) {
+    const statusMap = {
+        'Recibido': 'recibido',
+        'En preparación': 'preparacion',
+        'Listo': 'listo',
+        'Entregado': 'entregado',
+        'Cancelado': 'entregado'
+    };
+    
+    return statusMap[status] || 'recibido';
+}
+
+function getStatusColor(status) {
+    const statusMap = {
+        'Recibido': '3b82f6',
+        'En preparación': 'f59e0b',
+        'Listo': '10b981',
+        'Entregado': '6b7280',
+        'Cancelado': 'ef4444'
+    };
+    
+    return statusMap[status] || '6b7280';
+}
+
+function getFilterName(filter) {
+    const filterNames = {
+        'todos': 'Todos los pedidos',
+        'hoy': 'Hoy',
+        'ayer': 'Ayer',
+        'semana': 'Esta semana',
+        'mes': 'Este mes',
+        'pendientes': 'Pendientes',
+        'completados': 'Completados'
+    };
+    return filterNames[filter] || filter;
+}
+
+// FUNCIONES DE SONIDO
+let notificationAudio = null;
+
+function stopSound() {
+    if (notificationAudio) {
+        notificationAudio.pause();
+        notificationAudio.currentTime = 0;
+        notificationAudio.loop = false;
+    }
+}
+
+function playNewOrderSound() {
+    // Notificación del sistema (opcional)
+    if (Notification.permission === 'granted') {
+        const notification = new Notification('EL TACHI - Nuevo Pedido!', {
+            body: 'Tienes un nuevo pedido pendiente',
+            icon: 'logo.png',
+            tag: 'new-order',
+            requireInteraction: true
+        });
+        
+        notification.onclick = function() {
+            window.focus();
+            this.close();
+        };
+    }
+    
+    // Reproducir audio en bucle
+    if (!notificationAudio) {
+        notificationAudio = new Audio('SD_ALERT_3.mp3');
+        notificationAudio.volume = 0.8;
+        notificationAudio.loop = true; // Reproducir hasta que se detenga
+    }
+    
+    // Si ya está sonando, no reiniciar
+    if (notificationAudio.paused) {
+        notificationAudio.currentTime = 0;
+        notificationAudio.play().catch(() => {});
+    }
+}
+
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+}
+
+function showNewOrderAlert(orderId) {
+    // Detener sonido anterior (no se detiene, queremos que siga hasta aceptar)
+    // Verificar si ya hay una alerta activa
+    const existingAlert = document.getElementById('newOrderAlert');
+    if (existingAlert) {
+        // Ya hay una alerta, no crear otra (el sonido ya está sonando)
+        return;
+    }
+    
+    // Crear alerta visual
+    const alertDiv = document.createElement('div');
+    alertDiv.id = 'newOrderAlert';
+    alertDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(30,64,175,0.95);z-index:10000;display:flex;align-items:center;justify-content:center;';
+    
+    alertDiv.innerHTML = `
+        <div style="background:white;padding:40px;border-radius:20px;text-align:center;max-width:90%;width:350px;">
+            <i class="fas fa-bell" style="font-size:70px;color:#f59e0b;margin-bottom:15px;animation:pulse 0.3s infinite;"></i>
+            <h2 style="color:#1e40af;margin:0 0 10px 0;font-size:26px;">¡NUEVO PEDIDO!</h2>
+            <p style="font-size:22px;color:#374151;font-weight:bold;margin:0 0 5px 0;">#${orderId}</p>
+            <p style="font-size:14px;color:#6b7280;margin:0 0 25px 0;">Tocá ACEPTAR para silenciar</p>
+            <button id="acceptOrderBtn" style="width:100%;padding:18px 30px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:12px;font-size:18px;font-weight:bold;cursor:pointer;box-shadow:0 4px 15px rgba(16,185,129,0.4);">
+                <i class="fas fa-check-circle"></i> ACEPTAR
+            </button>
+        </div>
+        <style>
+            @keyframes pulse {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.1); }
+            }
+        </style>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // Al hacer click en ACEPTAR: SILENCIAR y cerrar
+    document.getElementById('acceptOrderBtn').onclick = function(e) {
+        e.stopPropagation();
+        stopSound(); // Detiene el sonido
+        alertDiv.remove();
+    };
+    
+    alertDiv.onclick = function(e) {
+        if (e.target === alertDiv) {
+            stopSound(); // Detiene el sonido
+            alertDiv.remove();
+        }
+    };
+    
+    // No timeout, debe quedarse hasta que el usuario acepte
+}
+
+// FUNCIONES DE FIREBASE
+async function getSettings() {
+    try {
+        const settingsRef = db.collection('settings').doc('config');
+        const doc = await settingsRef.get();
+        return doc.exists ? doc.data() : null;
+    } catch (error) {
+        console.error("Error obteniendo configuración:", error);
+        return null;
+    }
+}
+
+// Verificar si el usuario es admin
+async function checkAdminStatus(user) {
+    try {
+        if (!user) return false;
+        const userEmail = user.email;
+        const userId = user.id || user.uid;
+
+        // Verificar por UID si está disponible
+        if (userId) {
+            try {
+                const adminDoc = await db.collection('admins').doc(userId).get();
+                if (adminDoc && adminDoc.exists) {
+                    const data = adminDoc.data();
+                    if (data.isAdmin === true || data.activo === true || data.rol === 'admin') {
+                        return true;
+                    }
+                }
+            } catch (e) {
+                // Fall back gracefully si el UID no existe en admins
+                console.warn('checkAdminStatus: fallo al consultar por id', e);
+            }
+        }
+
+        // Verificar por correo electrónico como respaldo
+        if (userEmail) {
+            const adminByEmail = await db.collection('admins')
+                .where('email', '==', userEmail)
+                .limit(1)
+                .get();
+            const docs = adminByEmail?.docs || (adminByEmail?.length ? adminByEmail : []);
+            const first = Array.isArray(docs) ? docs[0] : null;
+            const data = first?.data ? first.data() : null;
+            if (data && (data.isAdmin === true || data.activo === true || data.rol === 'admin')) {
+                return true;
+            }
+        }
+        return false;
+    } catch (error) {
+        console.error("Error verificando admin:", error);
+        return false;
+    }
+}
+
+// Agregar un nuevo admin (solo admins pueden ejecutar esto)
+async function addAdmin(email, nombre) {
+    try {
+        // Buscar usuario por email para obtener su UID
+        // Como no podemos buscar por email directamente en Firestore sin Cloud Functions,
+        // vamos a crear el documento con el email y el admin lo completa manualmente
+        // o usamos el UID si lo conocemos
+        
+        const adminEmail = email.toLowerCase().trim();
+        
+        await db.collection('admins').add({
+            email: adminEmail,
+            nombre: nombre || 'Admin',
+            isAdmin: true,
+            createdAt: new Date().toISOString(),
+            createdBy: adminState.currentUser?.email || 'system'
+        });
+        
+        showNotification(`✅ Admin agregado: ${adminEmail}`, 'success');
+        return true;
+    } catch (error) {
+        console.error("Error agregando admin:", error);
+        showNotification('Error al agregar admin', 'error');
+        return false;
+    }
+}
+
+// Obtener lista de admins
+async function getAdminsList() {
+    try {
+        const snapshot = await db.collection('admins').get();
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (error) {
+        console.error("Error obteniendo admins:", error);
+        return [];
+    }
+}
+
+async function initializeDefaultSettings() {
+    try {
+        const defaultSettings = {
+            nombre_local: "AFM Orders",
+            horarios_por_dia: {
+                lunes: "11:00 - 23:00",
+                martes: "11:00 - 23:00",
+                miércoles: "11:00 - 23:00",
+                jueves: "11:00 - 23:00",
+                viernes: "11:00 - 00:00",
+                sábado: "11:00 - 00:00",
+                domingo: "11:00 - 23:00"
+            },
+            abierto: true,
+            mensaje_cerrado: "Lo sentimos, estamos cerrados en este momento. Volvemos mañana a las 11:00.",
+            precio_envio: 300,
+            tiempo_base_estimado: 30,
+            retiro_habilitado: true,
+            envio_habilitado: true,
+            telefono_whatsapp: "5491122334455",
+            mantener_historial_dias: 30
+        };
+        
+        await db.collection('settings').doc('config').set(defaultSettings);
+        console.log('✅ Configuración por defecto creada');
+        return true;
+        
+    } catch (error) {
+        console.error('Error inicializando configuración:', error);
+        return false;
+    }
+}
+
+async function loadOrders() {
+    try {
+        const now = new Date();
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        let oneDayAgoISO = oneDayAgo.toISOString();
+        if (!oneDayAgoISO || isNaN(new Date(oneDayAgoISO).getTime())) {
+            oneDayAgoISO = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+        }
+        const snapshot = await db.collection('orders')
+            .where('fecha', '>=', oneDayAgoISO)
+            .orderBy('fecha', 'desc')
+            .get();
+        let orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        if (!orders || orders.length === 0) {
+            const fallbackSnapshot = await db.collection('orders')
+                .orderBy('fecha', 'desc')
+                .limit(200)
+                .get();
+            orders = fallbackSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+
+        const previousOrderIds = new Set(adminState.orders.map(o => o.id));
+        const newOrders = orders.filter(o => !previousOrderIds.has(o.id));
+        adminState.orders = orders;
+
+        // Solo notificar si NO es la carga inicial
+        if (newOrders.length > 0 && adminState.initialLoadComplete) {
+            console.log(`🆕 ${newOrders.length} nuevos pedidos detectados`);
+            const reallyNew = newOrders.filter(o => !adminState.notifiedOrderIds.has(o.id));
+            if (reallyNew.length > 0) {
+                reallyNew.forEach(o => adminState.notifiedOrderIds.add(o.id));
+                const firstNew = reallyNew[0];
+                const orderIdDisplay = firstNew.id_pedido || firstNew.id;
+                showNewOrderAlert(orderIdDisplay);
+                playNewOrderSound();
+            }
+        } else if (newOrders.length > 0) {
+            console.log(`📦 ${newOrders.length} pedidos cargados (carga inicial - sin notificación)`);
+        }
+        console.log(`📦 ${adminState.orders.length} pedidos cargados (últimas 24hs)`);
+        return adminState.orders;
+    } catch (error) {
+        console.error('Error cargando pedidos:', error);
+        try {
+            const snapshot = await db.collection('orders')
+                .orderBy('fecha', 'desc')
+                .limit(100)
+                .get();
+            const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            adminState.orders = orders;
+            console.log(`📦 ${adminState.orders.length} pedidos cargados (fallback)`);
+            return adminState.orders;
+        } catch (fallbackError) {
+            console.error('Error en fallback de carga:', fallbackError);
+            return [];
+        }
+    }
+}
+
+async function loadProducts() {
+    try {
+        const snapshot = await db.collection('products').get();
+        adminState.products = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        // Inicializar productos filtrados con todos los productos
+        adminState.filteredProducts = [...adminState.products];
+        
+        console.log(`🍔 ${adminState.products.length} productos cargados`);
+        return adminState.products;
+        
+    } catch (error) {
+        console.error('Error cargando productos:', error);
+        return [];
+    }
+}
+
+async function loadCategories() {
+    try {
+        const snapshot = await db.collection('categories')
+            .orderBy('orden')
+            .get();
+        
+        adminState.categories = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        console.log(`🗂️ ${adminState.categories.length} categorías cargadas`);
+        return adminState.categories;
+        
+    } catch (error) {
+        console.error('Error cargando categorías:', error);
+        return [];
+    }
+}
+
+// FUNCIONES DE TIEMPO REAL MEJORADAS
+let ordersUnsubscribe = null;
+let productsUnsubscribe = null;
+let categoriesUnsubscribe = null;
+let settingsUnsubscribe = null;
+
+let ordersInterval = null;
+
+function startRealtimeUpdates() {
+    console.log('🎯 Iniciando actualizaciones cada 30 segundos...');
+    
+    // Detener suscripciones anteriores si existen
+    stopRealtimeUpdates();
+    
+    // Cargar pedidos inmediatamente
+    loadOrders();
+    
+    // Polling cada 30 segundos en lugar de tiempo real
+    ordersInterval = setInterval(function() {
+        console.log('📡 Actualizando pedidos...');
+        loadOrders();
+    }, 30000);
+    
+    // No iniciar otras suscripciones para evitar sobrecarga
+    adminState.realtimeEnabled = true;
+    console.log('✅ Actualizaciones configuradas (polling cada 30s)');
+}
+
+function stopRealtimeUpdates() {
+    if (ordersInterval) {
+        clearInterval(ordersInterval);
+        ordersInterval = null;
+    }
+    
+    adminState.realtimeEnabled = false;
+    console.log('⏹️ Actualizaciones detenidas');
+}
+
+function toggleRealtimeUpdates() {
+    adminState.realtimeEnabled = !adminState.realtimeEnabled;
+    
+    if (adminState.realtimeEnabled) {
+        startRealtimeUpdates();
+    } else {
+        stopRealtimeUpdates();
+        showNotification('⏸️ Actualizaciones en tiempo real desactivadas', 'warning');
+    }
+}
+
+function applyOrderFilter(filterType) {
+    const now = new Date();
+    adminState.currentFilter = filterType;
+    
+    const filterSelect = document.getElementById('orderFilter');
+    if (filterSelect) {
+        filterSelect.value = filterType;
+    }
+    
+    switch(filterType) {
+        case 'hoy':
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            adminState.filteredOrders = adminState.orders.filter(order => {
+                if (!order.fecha) return false;
+                const orderDate = order.fecha.toDate ? order.fecha.toDate() : new Date(order.fecha);
+                return orderDate >= today;
+            });
+            break;
+            
+        case 'ayer':
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            yesterday.setHours(0, 0, 0, 0);
+            const endOfYesterday = new Date(yesterday);
+            endOfYesterday.setHours(23, 59, 59, 999);
+            adminState.filteredOrders = adminState.orders.filter(order => {
+                if (!order.fecha) return false;
+                const orderDate = order.fecha.toDate ? order.fecha.toDate() : new Date(order.fecha);
+                return orderDate >= yesterday && orderDate <= endOfYesterday;
+            });
+            break;
+            
+        case 'semana':
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            weekAgo.setHours(0, 0, 0, 0);
+            adminState.filteredOrders = adminState.orders.filter(order => {
+                if (!order.fecha) return false;
+                const orderDate = order.fecha.toDate ? order.fecha.toDate() : new Date(order.fecha);
+                return orderDate >= weekAgo;
+            });
+            break;
+            
+        case 'mes':
+            const monthAgo = new Date();
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            monthAgo.setHours(0, 0, 0, 0);
+            adminState.filteredOrders = adminState.orders.filter(order => {
+                if (!order.fecha) return false;
+                const orderDate = order.fecha.toDate ? order.fecha.toDate() : new Date(order.fecha);
+                return orderDate >= monthAgo;
+            });
+            break;
+            
+        case 'pendientes':
+            adminState.filteredOrders = adminState.orders.filter(order => 
+                order.estado === 'Recibido' || order.estado === 'En preparación'
+            );
+            break;
+            
+        case 'completados':
+            adminState.filteredOrders = adminState.orders.filter(order => 
+                order.estado === 'Entregado' || order.estado === 'Listo'
+            );
+            break;
+            
+        case 'todos':
+        default:
+            adminState.filteredOrders = [...adminState.orders];
+            break;
+    }
+    
+    updateFilterCounter();
+    updateOrdersTable();
+}
+
+function updateFilterCounter() {
+    const filterCounter = document.getElementById('filterCounter');
+    if (filterCounter) {
+        filterCounter.textContent = `${adminState.filteredOrders.length} pedidos`;
+    }
+}
+
+function sortOrdersByPriority(orders) {
+    const priorityOrder = {
+        'En preparación': 1,
+        'Recibido': 2,
+        'Listo': 3,
+        'Entregado': 4,
+        'Cancelado': 5
+    };
+    
+    return orders.sort((a, b) => {
+        const priorityA = priorityOrder[a.estado] || 6;
+        const priorityB = priorityOrder[b.estado] || 6;
+        
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+        }
+        
+        const dateA = a.fecha?.toDate ? a.fecha.toDate() : new Date(a.fecha);
+        const dateB = b.fecha?.toDate ? b.fecha.toDate() : new Date(b.fecha);
+        return dateB - dateA;
+    });
+}
+
+// FUNCIONES DE LIMPIEZA
+async function clearOrderHistory() {
+    if (!confirm(`⚠️ ¿ESTÁS SEGURO DE LIMPIAR EL HISTORIAL DE PEDIDOS?\n\nEsta acción eliminará permanentemente todos los pedidos excepto:\n• Pedidos de hoy\n• Pedidos con estado "Recibido" o "En preparación"\n\nNo se puede deshacer.`)) {
+        return;
+    }
+    
+    try {
+        showLoading(true);
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const ordersToDelete = adminState.orders.filter(order => {
+            if (!order.fecha) return true;
+            
+            const orderDate = order.fecha.toDate ? order.fecha.toDate() : new Date(order.fecha);
+            const isOld = orderDate < today;
+            const isCompleted = order.estado === 'Entregado' || order.estado === 'Cancelado' || order.estado === 'Listo';
+            
+            return isOld && isCompleted;
+        });
+        
+        if (ordersToDelete.length === 0) {
+            showNotification('No hay pedidos antiguos para eliminar', 'info');
+            return;
+        }
+        
+        if (!confirm(`Se eliminarán ${ordersToDelete.length} pedidos antiguos.\n\n¿Continuar?`)) {
+            return;
+        }
+        
+        const batch = db.batch();
+        let deletedCount = 0;
+        
+        for (const order of ordersToDelete) {
+            const orderRef = db.collection('orders').doc(order.id);
+            batch.delete(orderRef);
+            deletedCount++;
+            
+            if (deletedCount % 400 === 0) {
+                await batch.commit();
+                console.log(`✅ Eliminados ${deletedCount} pedidos...`);
+            }
+        }
+        
+        if (deletedCount % 400 !== 0) {
+            await batch.commit();
+        }
+        
+        await loadOrders();
+        applyOrderFilter(adminState.currentFilter);
+        updateDashboard();
+        
+        showNotification(`✅ Historial limpiado: ${deletedCount} pedidos eliminados`, 'success');
+        
+    } catch (error) {
+        console.error('Error limpiando historial:', error);
+        showNotification('Error al limpiar el historial', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function clearAllOrders() {
+    if (!confirm(`🚨🚨🚨 PELIGRO: OPERACIÓN IRREVERSIBLE\n\n¿Estás ABSOLUTAMENTE seguro de eliminar TODOS los pedidos?\n\nEsta acción NO se puede deshacer y eliminará:\n• Todos los pedidos históricos\n• Pedidos en preparación\n• Pedidos pendientes\n\nESCRIBE "ELIMINAR TODO" para confirmar:`)) {
+        return;
+    }
+    
+    const confirmation = prompt('Escribe "ELIMINAR TODO" para confirmar:');
+    if (confirmation !== 'ELIMINAR TODO') {
+        showNotification('Operación cancelada', 'info');
+        return;
+    }
+    
+    try {
+        showLoading(true);
+        
+        const snapshot = await db.collection('orders').get();
+        const totalOrders = snapshot.size;
+        
+        if (totalOrders === 0) {
+            showNotification('No hay pedidos para eliminar', 'info');
+            return;
+        }
+        
+        if (!confirm(`⚠️ ÚLTIMA CONFIRMACIÓN\n\nSe eliminarán TODOS los ${totalOrders} pedidos permanentemente.\n\n¿Continuar?`)) {
+            return;
+        }
+        
+        const batch = db.batch();
+        let deletedCount = 0;
+        
+        snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+            deletedCount++;
+            
+            if (deletedCount % 400 === 0) {
+                batch.commit();
+                console.log(`✅ Eliminados ${deletedCount} pedidos...`);
+            }
+        });
+        
+        if (deletedCount % 400 !== 0) {
+            await batch.commit();
+        }
+        
+        await loadOrders();
+        applyOrderFilter('todos');
+        updateDashboard();
+        
+        showNotification(`✅ TODOS los pedidos eliminados (${deletedCount})`, 'success');
+        
+    } catch (error) {
+        console.error('Error eliminando todos los pedidos:', error);
+        showNotification('Error al eliminar los pedidos', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// FUNCIONES DE UI - DASHBOARD
+function updateDashboard() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayOrders = adminState.orders.filter(order => {
+        if (!order.fecha) return false;
+        const orderDate = order.fecha.toDate ? order.fecha.toDate() : new Date(order.fecha);
+        return orderDate >= today;
+    });
+    
+    adminState.stats.todayOrders = todayOrders.length;
+    adminState.stats.todaySales = todayOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+    adminState.stats.activeOrders = adminState.orders.filter(order => 
+        order.estado === 'Recibido' || order.estado === 'En preparación'
+    ).length;
+    adminState.stats.pendingOrders = adminState.orders.filter(order => 
+        order.estado === 'Recibido'
+    ).length;
+    
+    document.getElementById('ordersToday').textContent = adminState.stats.todayOrders;
+    document.getElementById('salesToday').textContent = `$${adminState.stats.todaySales}`;
+    document.getElementById('activeOrders').textContent = adminState.stats.activeOrders;
+    
+    // Actualizar badge de pendientes si existe
+    const pendingBadge = document.getElementById('pendingOrdersBadge');
+    if (pendingBadge) {
+        pendingBadge.textContent = adminState.stats.pendingOrders;
+        pendingBadge.style.display = adminState.stats.pendingOrders > 0 ? 'flex' : 'none';
+    }
+    
+    updateRecentOrdersList();
+    updateTopProductsList();
+    updateOrdersChart();
+}
+
+function updateRecentOrdersList() {
+    const container = document.getElementById('recentOrdersList');
+    if (!container) return;
+    
+    const recentOrders = adminState.orders.slice(0, 5);
+    
+    if (recentOrders.length === 0) {
+        container.innerHTML = '<p style="padding: 20px; text-align: center; color: #6b7280;">No hay pedidos recientes</p>';
+        return;
+    }
+    
+    let html = '';
+    recentOrders.forEach(order => {
+        const fecha = order.fecha?.toDate ? order.fecha.toDate() : new Date(order.fecha);
+        const timeStr = fecha ? fecha.toLocaleTimeString('es-ES', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        }) : '--';
+        
+        const isUrgent = order.estado === 'Recibido' && order.tipo_pedido === 'envío';
+        
+        html += `
+            <div style="padding: 12px 0; border-bottom: 1px solid #e5e7eb; ${isUrgent ? 'background: #fef3c7; margin: 0 -10px; padding: 12px 10px; border-radius: 8px;' : ''}">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <strong style="font-size: 0.9rem;">${order.id_pedido || order.id.substring(0, 8)}</strong>
+                            ${isUrgent ? '<span style="background: #f59e0b; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">URGENTE</span>' : ''}
+                        </div>
+                        <div style="font-size: 0.8rem; color: #6b7280; margin-top: 2px;">
+                            ${order.nombre_cliente || 'Sin nombre'} • ${timeStr}
+                        </div>
+                    </div>
+                    <div>
+                        <span class="status-badge status-${getStatusClass(order.estado)}" style="font-size: 0.7rem;">
+                            ${order.estado || 'Recibido'}
+                        </span>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+                    <span style="font-size: 0.85rem;">${order.items?.length || 0} items</span>
+                    <strong style="color: #1e40af;">$${order.total || 0}</strong>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function updateTopProductsList() {
+    const container = document.getElementById('topProductsList');
+    if (!container) return;
+    
+    const productCount = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Contar solo pedidos de hoy
+    const todayOrders = adminState.orders.filter(order => {
+        if (!order.fecha) return false;
+        const orderDate = order.fecha.toDate ? order.fecha.toDate() : new Date(order.fecha);
+        return orderDate >= today;
+    });
+    
+    todayOrders.forEach(order => {
+        if (order.items) {
+            order.items.forEach(item => {
+                const productId = item.id;
+                if (!productCount[productId]) {
+                    productCount[productId] = 0;
+                }
+                productCount[productId] += item.cantidad || 1;
+            });
+        }
+    });
+    
+    const topProducts = Object.entries(productCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([productId, count]) => {
+            const product = adminState.products.find(p => p.id === productId);
+            return {
+                name: product?.nombre || productId,
+                count: count,
+                price: product?.precio || 0
+            };
+        });
+    
+    if (topProducts.length === 0) {
+        container.innerHTML = '<p style="padding: 20px; text-align: center; color: #6b7280;">No hay datos de ventas hoy</p>';
+        return;
+    }
+    
+    let html = '';
+    topProducts.forEach((product, index) => {
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '📊';
+        html += `
+            <div style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.2rem;">${medal}</span>
+                        <strong style="font-size: 0.9rem;">${product.name}</strong>
+                    </div>
+                    <span style="font-weight: 600; color: #1e40af;">${product.count} vendidos</span>
+                </div>
+                <div style="font-size: 0.8rem; color: #6b7280; margin-top: 2px;">
+                    $${product.price} cada uno
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function updateOrdersChart() {
+    const ctx = document.getElementById('ordersChart');
+    const noDataEl = document.getElementById('ordersChartNoData');
+    if (!ctx) return;
+    
+    if (window.ordersChartInstance) {
+        window.ordersChartInstance.destroy();
+    }
+    
+    const today = new Date();
+    const todayStr = today.toDateString();
+    
+    // Horas de 8:00 a 23:00
+    const startHour = 8;
+    const endHour = 23;
+    const hours = endHour - startHour;
+    
+    const labels = Array.from({length: hours}, (_, i) => `${startHour + i}:00`);
+    const ordersByHour = Array(hours).fill(0);
+    
+    let hasData = false;
+    let totalOrders = 0;
+    
+    // Depuración
+    console.log('Total pedidos en estado:', adminState.orders.length);
+    
+    adminState.orders.forEach(order => {
+        if (!order.fecha) return;
+        
+        try {
+            let orderDate;
+            if (order.fecha.toDate && typeof order.fecha.toDate === 'function') {
+                orderDate = order.fecha.toDate();
+            } else if (order.fecha instanceof Date) {
+                orderDate = order.fecha;
+            } else {
+                orderDate = new Date(order.fecha);
+            }
+            
+            // Verificar que la fecha sea válida
+            if (isNaN(orderDate.getTime())) return;
+            
+            // Comparar solo fecha
+            if (orderDate.toDateString() === todayStr) {
+                hasData = true;
+                totalOrders++;
+                const hour = orderDate.getHours();
+                
+                if (hour >= startHour && hour < endHour) {
+                    ordersByHour[hour - startHour]++;
+                }
+            }
+        } catch (e) {
+            console.log('Error procesando fecha:', e, order.fecha);
+        }
+    });
+    
+    console.log('Pedidos hoy:', totalOrders, 'hasData:', hasData);
+    
+    // Si no hay datos, igualmente mostrar el gráfico vacío
+    window.ordersChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Pedidos por hora',
+                data: ordersByHour,
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                borderColor: '#3b82f6',
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true,
+                pointBackgroundColor: '#3b82f6',
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 2,
+                pointRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    titleFont: {
+                        size: 12
+                    },
+                    bodyFont: {
+                        size: 14
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+// FUNCIONES DE UI - PEDIDOS
+function updateOrdersTable() {
+    const tbody = document.getElementById('ordersTableBody');
+    if (!tbody) return;
+    
+    if (adminState.filteredOrders.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align: center; padding: 40px;">
+                    <div style="color: #6b7280;">
+                        <i class="fas fa-shopping-cart" style="font-size: 2rem; margin-bottom: 10px; opacity: 0.5;"></i>
+                        <p>No hay pedidos para mostrar</p>
+                        <p style="font-size: 0.9rem; margin-top: 5px;">
+                            Filtro: ${getFilterName(adminState.currentFilter)}
+                        </p>
+                        <button class="button-secondary" onclick="forceRefreshOrders()" style="margin-top: 15px;">
+                            <i class="fas fa-sync-alt"></i> Actualizar
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    const sortedOrders = sortOrdersByPriority([...adminState.filteredOrders]);
+    
+    tbody.innerHTML = '';
+    
+    sortedOrders.forEach(order => {
+        const row = document.createElement('tr');
+        
+        const fecha = order.fecha?.toDate ? order.fecha.toDate() : new Date(order.fecha);
+        const fechaStr = fecha ? fecha.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        }) : '--';
+        
+        const statusColors = {
+            'Recibido': '#3b82f6',
+            'En preparación': '#f59e0b',
+            'Listo': '#10b981',
+            'Entregado': '#6b7280',
+            'Cancelado': '#ef4444'
+        };
+        
+        const statusSelect = `
+            <select class="status-select" 
+                    data-order-id="${order.id}"
+                    onchange="updateOrderStatus(this)"
+                    style="background-color: ${statusColors[order.estado] || '#6b7280'}; 
+                           color: white; 
+                           border: none; 
+                           padding: 6px 12px; 
+                           border-radius: 20px; 
+                           font-weight: 600;
+                           cursor: pointer;
+                           min-width: 140px;
+                           transition: all 0.2s;">
+                <option value="Recibido" ${order.estado === 'Recibido' ? 'selected' : ''}>Recibido</option>
+                <option value="En preparación" ${order.estado === 'En preparación' ? 'selected' : ''}>En preparación</option>
+                <option value="Listo" ${order.estado === 'Listo' ? 'selected' : ''}>Listo</option>
+                <option value="Entregado" ${order.estado === 'Entregado' ? 'selected' : ''}>Entregado</option>
+                <option value="Cancelado" ${order.estado === 'Cancelado' ? 'selected' : ''}>Cancelado</option>
+            </select>
+        `;
+        
+        const timeInput = `
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <input type="number" 
+                    class="time-input" 
+                    style="width: 50px; padding: 4px 6px; border: 1px solid #e5e7eb; border-radius: 6px; text-align: center;" 
+                    value="${order.tiempo_estimado_actual || adminState.settings?.tiempo_base_estimado || 30}"
+                    data-order-id="${order.id}"
+                    onchange="updateOrderTime(this)"
+                    min="1"
+                    max="180">
+                <span style="font-size: 0.8rem; color: #6b7280;">min</span>
+            </div>
+        `;
+        
+        const customerInfo = `
+            <div style="max-width: 150px;">
+                <div style="font-weight: 600; font-size: 0.9rem; color: #1e40af;">${order.nombre_cliente || '--'}</div>
+                <div style="font-size: 0.75rem; color: #6b7280; margin-top: 2px;">
+                    <i class="fas fa-phone" style="color: #10b981;"></i> ${order.telefono || '--'}
+                </div>
+                ${order.direccion && order.tipo_pedido === 'envío' ? 
+                    `<div style="font-size: 0.7rem; color: #ef4444; margin-top: 2px; display: flex; align-items: center; gap: 4px;">
+                        <i class="fas fa-map-marker-alt"></i> 
+                        <span style="overflow: hidden; text-overflow: ellipsis;">${order.direccion.substring(0, 25)}</span>
+                    </div>` : 
+                    `<div style="font-size: 0.7rem; color: #10b981; margin-top: 2px; display: flex; align-items: center; gap: 4px;">
+                        <i class="fas fa-store"></i> Retiro en local
+                    </div>`
+                }
+            </div>
+        `;
+        
+        const commentsHtml = order.comentarios ? `
+            <div style="position: relative; display: inline-block;">
+                <i class="fas fa-sticky-note" style="color: #f59e0b; cursor: help;" 
+                   title="${order.comentarios.replace(/"/g, '&quot;')}"></i>
+            </div>
+        ` : '';
+        
+        const itemsCount = order.items?.length || 0;
+        const itemsHtml = order.items ? `
+            <div style="font-size: 0.75rem; color: #6b7280; margin-top: 2px;">
+                ${itemsCount} item${itemsCount !== 1 ? 's' : ''}
+            </div>
+        ` : '';
+        
+        const actionButtons = `
+            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                <button class="action-button button-view" onclick="showOrderDetails('${order.id}')" 
+                        style="padding: 4px 8px; font-size: 0.8rem; background: #3b82f6;">
+                    <i class="fas fa-eye"></i> Detalles
+                </button>
+                ${order.telefono ? `
+                    <button class="action-button button-whatsapp" 
+                            onclick="openWhatsAppAdmin('${order.telefono}', '${order.id_pedido || order.id}', '${order.nombre_cliente || ''}', ${order.total || 0}, '${order.estado || 'Recibido'}', ${order.tiempo_estimado_actual || 30})"
+                            style="padding: 4px 8px; font-size: 0.8rem; background: #25D366;">
+                        <i class="fab fa-whatsapp"></i> WhatsApp
+                    </button>
+                ` : ''}
+            </div>
+        `;
+        
+        // Destacar pedidos pendientes (no modificados)
+        const isPending = order.estado === 'Recibido';
+        const isPreparing = order.estado === 'En preparación';
+        const isNew = adminState.lastOrderId === order.id;
+        const isRegisteredUser = order.is_registered_user || order.user_id;
+        
+        // Prioridad visual: Pendiente > Preparando > Nuevo
+        let highlightStyle = '';
+        let highlightIcon = '';
+        let badge = '';
+        
+        if (isPending) {
+            highlightStyle = 'background: linear-gradient(90deg, #fef3c7 0%, #fde68a 100%) !important; border-left: 4px solid #f59e0b !important;';
+            highlightIcon = '<i class="fas fa-exclamation-circle" style="color: #f59e0b; font-size: 1rem;"></i>';
+            badge = '<span style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 700; margin-left: 4px;">PENDIENTE</span>';
+        } else if (isPreparing) {
+            highlightStyle = 'background: linear-gradient(90deg, #dbeafe 0%, #bfdbfe 100%) !important; border-left: 4px solid #3b82f6 !important;';
+            highlightIcon = '<i class="fas fa-fire" style="color: #3b82f6; font-size: 1rem;"></i>';
+        } else if (isNew) {
+            highlightStyle = 'background-color: #f0f9ff !important; animation: highlightRow 2s;';
+            highlightIcon = '<i class="fas fa-star" style="color: #3b82f6;"></i>';
+        }
+        
+        row.innerHTML = `
+            <td style="${highlightStyle}">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="min-width: 24px;">
+                        ${highlightIcon}
+                    </div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <strong style="font-size: 0.9rem; color: #1e40af;">${order.id_pedido || order.id.substring(0, 8)}</strong>
+                            ${isRegisteredUser ? '<i class="fas fa-user-check" style="color: #10b981; font-size: 0.75rem;" title="Usuario registrado"></i>' : ''}
+                            ${commentsHtml}
+                            ${badge}
+                            ${isNew && !isPending ? '<span style="background: #3b82f6; color: white; padding: 1px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 600;">NUEVO</span>' : ''}
+                        </div>
+                        ${itemsHtml}
+                    </div>
+                </div>
+            </td>
+            <td style="${highlightStyle}">
+                <div style="font-size: 0.85rem;">${fechaStr}</div>
+            </td>
+            <td style="${highlightStyle}">
+                ${customerInfo}
+            </td>
+            <td style="${highlightStyle}">
+                <strong style="color: #1e40af; font-size: 1rem;">$${order.total || 0}</strong>
+            </td>
+            <td style="${highlightStyle}">
+                ${statusSelect}
+            </td>
+            <td style="${highlightStyle}">
+                ${timeInput}
+            </td>
+            <td style="${highlightStyle}">
+                ${actionButtons}
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+    
+    // Agregar estilo para highlight
+    if (!document.getElementById('highlightStyle')) {
+        const style = document.createElement('style');
+        style.id = 'highlightStyle';
+        style.textContent = `
+            @keyframes highlightRow {
+                0% { background-color: #f0f9ff; }
+                100% { background-color: transparent; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+}
+
+// FUNCIONES DE PEDIDOS
+async function updateOrderStatus(select) {
+    const orderId = select.dataset.orderId;
+    const newStatus = select.value;
+    
+    try {
+        await db.collection('orders').doc(orderId).update({
+            estado: newStatus,
+            updated_at: new Date().toISOString()
+        });
+        
+        const orderIndex = adminState.orders.findIndex(o => o.id === orderId);
+        if (orderIndex !== -1) {
+            adminState.orders[orderIndex].estado = newStatus;
+            adminState.orders[orderIndex].updated_at = new Date();
+        }
+        
+        applyOrderFilter(adminState.currentFilter);
+        updateDashboard();
+        
+        showNotification(`Estado actualizado a: ${newStatus}`, 'success');
+        
+    } catch (error) {
+        console.error('Error actualizando estado:', error);
+        showNotification('Error al actualizar el estado', 'error');
+        // Revertir el select al estado anterior
+        const order = adminState.orders.find(o => o.id === orderId);
+        if (order) {
+            select.value = order.estado;
+        }
+    }
+}
+
+async function updateOrderTime(input) {
+    const orderId = input.dataset.orderId;
+    const newTime = parseInt(input.value);
+    
+    if (isNaN(newTime) || newTime < 1 || newTime > 180) {
+        showNotification('Tiempo inválido. Use entre 1 y 180 minutos.', 'error');
+        input.value = adminState.orders.find(o => o.id === orderId)?.tiempo_estimado_actual || 30;
+        return;
+    }
+    
+    try {
+        await db.collection('orders').doc(orderId).update({
+            tiempo_estimado_actual: newTime
+        });
+        
+        const orderIndex = adminState.orders.findIndex(o => o.id === orderId);
+        if (orderIndex !== -1) {
+            adminState.orders[orderIndex].tiempo_estimado_actual = newTime;
+        }
+        
+        showNotification('Tiempo estimado actualizado', 'success');
+        
+    } catch (error) {
+        console.error('Error actualizando tiempo:', error);
+        showNotification('Error al actualizar el tiempo', 'error');
+    }
+}
+
+async function showOrderDetails(orderId) {
+    const order = adminState.orders.find(o => o.id === orderId);
+    if (!order) {
+        showNotification('Pedido no encontrado', 'error');
+        return;
+    }
+    
+    const modal = document.getElementById('orderModal');
+    const modalOrderId = document.getElementById('modalOrderId');
+    const modalOrderDetails = document.getElementById('modalOrderDetails');
+    
+    if (!modal || !modalOrderId || !modalOrderDetails) {
+        console.error('Elementos del modal no encontrados');
+        return;
+    }
+    
+    const fecha = order.fecha?.toDate ? order.fecha.toDate() : new Date(order.fecha);
+    const fechaStr = fecha ? fecha.toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    }) : '--';
+    
+    let itemsHtml = '';
+    if (order.items && order.items.length > 0) {
+        itemsHtml = `
+            <div style="margin-top: 20px;">
+                <h4 style="margin-bottom: 10px; color: #1e40af; border-bottom: 2px solid #e5e7eb; padding-bottom: 5px;">
+                    Detalle del pedido (${order.items.length} items)
+                </h4>
+                <div style="background: #f8fafc; padding: 15px; border-radius: 8px; max-height: 300px; overflow-y: auto;">
+        `;
+        
+        let itemIndex = 1;
+        order.items.forEach((item) => {
+            // OBTENER EL NOMBRE DEL PRODUCTO
+            let productName = item.nombre || 'Producto';
+            let productPrice = item.precio || 0;
+            let productQuantity = item.cantidad || 1;
+            
+            // Si no tiene nombre, buscar en la lista de productos por ID
+            if (!item.nombre && item.id) {
+                const product = adminState.products.find(p => p.id === item.id);
+                if (product) {
+                    productName = product.nombre || 'Producto';
+                    productPrice = product.precio || 0;
+                }
+            }
+            
+            itemsHtml += `
+                <div style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 6px; border-left: 4px solid #3b82f6; position: relative;">
+                    <div style="position: absolute; top: 10px; right: 10px; background: #3b82f6; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 600;">
+                        ${itemIndex++}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="flex: 1; padding-right: 30px;">
+                            <strong style="color: #1e40af; font-size: 1rem;">${productName}</strong>
+                            <div style="font-size: 0.9rem; color: #6b7280; margin-top: 4px;">
+                                Cantidad: <strong>${productQuantity}</strong> • Precio unitario: <strong>$${productPrice}</strong>
+                            </div>
+                            ${item.comentarios ? `
+                                <div style="margin-top: 6px; padding: 6px; background: #fef3c7; border-radius: 4px; font-size: 0.85rem; color: #92400e; border-left: 3px solid #f59e0b;">
+                                    <strong>Nota:</strong> ${item.comentarios}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div style="font-weight: 700; color: #1e40af; font-size: 1.2rem;">
+                            $${productPrice * productQuantity}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        itemsHtml += '</div></div>';
+    }
+    
+    // Sección de usuario registrado
+    const userInfoHtml = order.is_registered_user || order.user_id ? `
+        <div style="background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #3b82f6;">
+            <div style="font-weight: 600; color: #1e40af; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-user-check" style="color: #3b82f6;"></i> Usuario Registrado
+                <span style="background: #10b981; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem;">CUENTA GOOGLE</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                ${order.user_name ? `
+                    <div>
+                        <div style="font-size: 0.8rem; color: #6b7280;">Nombre</div>
+                        <div style="font-weight: 600; color: #1e40af;">${order.user_name}</div>
+                    </div>
+                ` : ''}
+                ${order.user_email ? `
+                    <div>
+                        <div style="font-size: 0.8rem; color: #6b7280;">Email</div>
+                        <div style="font-weight: 600; color: #1e40af;">${order.user_email}</div>
+                    </div>
+                ` : ''}
+                ${order.user_id ? `
+                    <div>
+                        <div style="font-size: 0.8rem; color: #6b7280;">ID de Usuario</div>
+                        <div style="font-weight: 600; color: #6b7280; font-size: 0.8rem;">${order.user_id}</div>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    ` : '';
+    
+    modalOrderId.textContent = `Pedido: ${order.id_pedido || order.id}`;
+    modalOrderDetails.innerHTML = `
+        ${userInfoHtml}
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
+            <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                <div style="font-size: 0.9rem; color: #6b7280;">Cliente</div>
+                <div style="font-weight: 600; font-size: 1.1rem; color: #1e40af;">${order.nombre_cliente || '--'}</div>
+                <div style="margin-top: 5px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-phone" style="color: #10b981;"></i> 
+                    <span>${order.telefono || '--'}</span>
+                </div>
+            </div>
+            
+            <div style="background: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                <div style="font-size: 0.9rem; color: #6b7280;">Fecha y Hora</div>
+                <div style="font-weight: 600; font-size: 1.1rem;">${fechaStr}</div>
+                <div style="margin-top: 5px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-clock" style="color: #f59e0b;"></i> 
+                    <span>${order.tiempo_estimado_actual || adminState.settings?.tiempo_base_estimado || 30} min estimados</span>
+                </div>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
+            <div style="background: ${order.tipo_pedido === 'envío' ? '#f0fdf4' : '#f8fafc'}; padding: 15px; border-radius: 8px; border-left: 4px solid ${order.tipo_pedido === 'envío' ? '#10b981' : '#6b7280'};">
+                <div style="font-size: 0.9rem; color: #6b7280;">Tipo de Pedido</div>
+                <div style="font-weight: 600; font-size: 1.1rem; color: ${order.tipo_pedido === 'envío' ? '#10b981' : '#1e40af'};">
+                    ${order.tipo_pedido === 'envío' ? '🚚 Envío a domicilio' : '🏪 Retiro en local'}
+                </div>
+                ${order.direccion && order.tipo_pedido === 'envío' ? `
+                    <div style="margin-top: 5px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; color: #ef4444;">
+                        <i class="fas fa-map-marker-alt"></i> 
+                        <span>${order.direccion}</span>
+                    </div>
+                ` : ''}
+            </div>
+            
+            <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; border-left: 4px solid #${getStatusColor(order.estado)};">
+                <div style="font-size: 0.9rem; color: #6b7280;">Estado Actual</div>
+                <div style="font-weight: 600; font-size: 1.1rem; color: #${getStatusColor(order.estado)};">
+                    ${order.estado || 'Recibido'}
+                </div>
+                <div style="margin-top: 5px; font-size: 0.9rem; color: #6b7280;">
+                    <i class="fas fa-history"></i> Actualizado: ${order.updated_at ? new Date(order.updated_at).toLocaleTimeString('es-ES') : '--'}
+                </div>
+            </div>
+        </div>
+        
+        ${order.comentarios ? `
+            <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f59e0b;">
+                <div style="font-weight: 600; color: #92400e; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-sticky-note"></i> Comentarios del Cliente
+                </div>
+                <div style="color: #92400e; line-height: 1.5;">${order.comentarios}</div>
+            </div>
+        ` : ''}
+        
+        ${itemsHtml}
+        
+        <hr style="margin: 25px 0; border: none; border-top: 2px solid #e5e7eb;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); border-radius: 12px; color: white;">
+            <div>
+                <div style="font-size: 0.9rem; opacity: 0.9;">Resumen de Pago</div>
+                <div style="font-size: 0.9rem; margin-top: 5px;">
+                    <div>Subtotal: <strong>$${order.subtotal || order.total || 0}</strong></div>
+                    ${order.precio_envio ? `<div>Envío: <strong>$${order.precio_envio}</strong></div>` : ''}
+                    ${order.descuento ? `<div>Descuento: <strong>-$${order.descuento}</strong></div>` : ''}
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 1rem; opacity: 0.9;">Total</div>
+                <div style="font-size: 2.5rem; font-weight: 800;">$${order.total || 0}</div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 20px; display: flex; gap: 10px;">
+            ${order.telefono ? `
+                <button class="button-primary" onclick="openWhatsAppAdmin('${order.telefono}', '${order.id_pedido || order.id}', '${order.nombre_cliente || ''}', ${order.total || 0}, '${order.estado || 'Recibido'}', ${order.tiempo_estimado_actual || 30})" style="flex: 1;">
+                    <i class="fab fa-whatsapp"></i> Enviar WhatsApp
+                </button>
+            ` : ''}
+            <button class="button-secondary" onclick="document.getElementById('orderModal').style.display = 'none'" style="flex: 1;">
+                <i class="fas fa-times"></i> Cerrar
+            </button>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+}
+
+// FUNCIÓN WHATSAPP
+function openWhatsAppAdmin(phone, orderId, customerName, total, status, estimatedTime) {
+    if (!phone) {
+        showNotification('No hay número de teléfono para este pedido', 'error');
+        return;
+    }
+    
+    let message = `Hola ${customerName || 'cliente'}! 👋\n\n`;
+    message += `Soy de ${adminState.settings?.nombre_local || 'AFM Orders'}. `;
+    
+    switch(status) {
+        case 'En preparación':
+            message += `Tu pedido #${orderId} está en preparación. `;
+            if (estimatedTime) {
+                message += `Tiempo estimado: ${estimatedTime} minutos. `;
+            }
+            message += `Te avisaremos cuando esté listo.`;
+            break;
+            
+        case 'Listo':
+            message += `¡Tu pedido #${orderId} está listo para retirar! `;
+            if (adminState.settings?.retiro_habilitado) {
+                message += `Podés pasar por el local cuando quieras.`;
+            }
+            break;
+            
+        case 'Entregado':
+            message += `¡Gracias por tu pedido #${orderId}! `;
+            message += `Esperamos que hayas disfrutado. ¡Te esperamos pronto!`;
+            break;
+            
+        default:
+            message += `Tu pedido #${orderId} ha sido recibido. `;
+            message += `Te mantendremos informado sobre el estado.`;
+    }
+    
+    message += `\n\nTotal: $${total}`;
+    message += `\n\n¡Gracias por elegirnos!`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodedMessage}`;
+    
+    window.open(whatsappUrl, '_blank');
+}
+
+// FUNCIONES DE UI - PRODUCTOS (CON BUSCADOR)
+function updateProductsGrid() {
+    const grid = document.getElementById('productsGrid');
+    if (!grid) return;
+    
+    // Crear contenedor del buscador si no existe
+    let searchContainer = document.getElementById('productSearchContainer');
+    if (!searchContainer) {
+        searchContainer = document.createElement('div');
+        searchContainer.id = 'productSearchContainer';
+        searchContainer.className = 'filter-controls';
+        searchContainer.style.cssText = 'margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #f8fafc; border-radius: 12px;';
+        
+        const searchBox = document.createElement('div');
+        searchBox.style.cssText = 'display: flex; align-items: center; gap: 10px; flex: 1; max-width: 500px;';
+        
+        searchBox.innerHTML = `
+            <div style="position: relative; flex: 1;">
+                <input type="text" 
+                       id="productSearchInput" 
+                       placeholder="Buscar productos por nombre..." 
+                       class="form-input" 
+                       style="padding-left: 40px; width: 100%;"
+                       value="${adminState.productSearchTerm}">
+                <i class="fas fa-search" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #6b7280;"></i>
+            </div>
+            <button id="clearProductSearch" class="button-secondary" style="white-space: nowrap;">
+                <i class="fas fa-times"></i> Limpiar
+            </button>
+        `;
+        
+        searchContainer.appendChild(searchBox);
+        
+        // Contador de productos
+        const counter = document.createElement('div');
+        counter.id = 'productCounter';
+        counter.className = 'filter-counter';
+        counter.textContent = `${adminState.filteredProducts.length} productos`;
+        searchContainer.appendChild(counter);
+        
+        // Insertar antes del grid
+        grid.parentNode.insertBefore(searchContainer, grid);
+        
+        // Configurar eventos del buscador
+        const searchInput = document.getElementById('productSearchInput');
+        const clearButton = document.getElementById('clearProductSearch');
+        
+        searchInput.addEventListener('input', function() {
+            adminState.productSearchTerm = this.value.trim();
+            filterProducts(adminState.productSearchTerm);
+        });
+        
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                filterProducts(this.value.trim());
+            }
+        });
+        
+        clearButton.addEventListener('click', function() {
+            adminState.productSearchTerm = '';
+            document.getElementById('productSearchInput').value = '';
+            filterProducts('');
+        });
+    }
+    
+    // Actualizar contador
+    const counter = document.getElementById('productCounter');
+    if (counter) {
+        counter.textContent = `${adminState.filteredProducts.length} productos`;
+    }
+    
+    if (adminState.filteredProducts.length === 0) {
+        grid.innerHTML = `
+            <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+                <i class="fas fa-hamburger" style="font-size: 3rem; color: #e5e7eb; margin-bottom: 20px;"></i>
+                <p style="color: #6b7280; margin-bottom: 10px;">
+                    ${adminState.productSearchTerm ? 
+                        `No se encontraron productos que coincidan con "${adminState.productSearchTerm}"` : 
+                        'No hay productos registrados'}
+                </p>
+                <p style="font-size: 0.9rem; color: #9ca3af; margin-bottom: 20px;">
+                    ${adminState.productSearchTerm ? 
+                        'Intenta con otros términos de búsqueda' : 
+                        'Agrega productos para comenzar a vender'}
+                </p>
+                ${!adminState.productSearchTerm ? `
+                    <button class="button-primary" id="addFirstProduct" style="margin-top: 15px;">
+                        <i class="fas fa-plus"></i> Agregar primer producto
+                    </button>
+                ` : ''}
+            </div>
+        `;
+        
+        document.getElementById('addFirstProduct')?.addEventListener('click', () => {
+            showNewProductForm();
+        });
+        
+        return;
+    }
+    
+    grid.innerHTML = '';
+    
+    adminState.filteredProducts.forEach(product => {
+        const soldCount = adminState.orders.reduce((count, order) => {
+            if (order.items) {
+                const item = order.items.find(i => i.id === product.id);
+                if (item) {
+                    return count + (item.cantidad || 1);
+                }
+            }
+            return count;
+        }, 0);
+        
+        // Resaltar término de búsqueda en el nombre
+        let highlightedName = product.nombre;
+        if (adminState.productSearchTerm) {
+            const regex = new RegExp(`(${adminState.productSearchTerm})`, 'gi');
+            highlightedName = product.nombre.replace(regex, '<mark style="background: #fef3c7; color: #92400e; padding: 0 2px; border-radius: 3px;">$1</mark>');
+        }
+        
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid ${product.disponible ? '#e5e7eb' : '#fee2e2'};
+            transition: all 0.2s;
+            opacity: ${product.disponible ? '1' : '0.7'};
+        `;
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                <h3 class="card-title" style="margin: 0; color: #1e40af;">${highlightedName}</h3>
+                <span class="status-badge ${product.disponible ? 'status-listo' : 'status-entregado'}" style="font-size: 0.75rem;">
+                    ${product.disponible ? '✓ Disponible' : '✗ No disponible'}
+                </span>
+            </div>
+            <p style="color: #6b7280; margin-bottom: 15px; font-size: 0.9rem; min-height: 40px; line-height: 1.4;">
+                ${product.descripcion || 'Sin descripción'}
+            </p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <div class="card-value" style="color: #1e40af; font-size: 1.5rem; font-weight: 700;">$${product.precio}</div>
+                    <div style="font-size: 0.8rem; color: #6b7280; display: flex; align-items: center; gap: 4px;">
+                        <i class="fas fa-chart-line"></i> ${soldCount} vendidos
+                    </div>
+                </div>
+                <div style="font-size: 0.8rem; color: #9ca3af; background: #f3f4f6; padding: 4px 10px; border-radius: 12px;">
+                    ${adminState.categories.find(c => c.id === product.categoria)?.nombre || 'Sin categoría'}
+                </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="action-button button-edit" onclick="editProduct('${product.id}')" style="flex: 1; background: #f59e0b; color: white; border: none; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <i class="fas fa-edit"></i> Editar
+                </button>
+                <button class="action-button button-delete" onclick="deleteProduct('${product.id}')" style="width: 40px; background: #ef4444; color: white; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        grid.appendChild(card);
+    });
+}
+
+function filterProducts(searchTerm) {
+    adminState.productSearchTerm = searchTerm;
+    
+    if (!searchTerm) {
+        adminState.filteredProducts = [...adminState.products];
+    } else {
+        const term = searchTerm.toLowerCase();
+        adminState.filteredProducts = adminState.products.filter(product => 
+            product.nombre.toLowerCase().includes(term) ||
+            (product.descripcion && product.descripcion.toLowerCase().includes(term)) ||
+            (product.categoria && adminState.categories.find(c => c.id === product.categoria)?.nombre.toLowerCase().includes(term))
+        );
+    }
+    
+    updateProductsGrid();
+}
+
+function showNewProductForm() {
+    const form = document.getElementById('productForm');
+    const title = document.getElementById('productFormTitle');
+    const saveButton = document.getElementById('saveProductButton');
+    
+    if (form && title && saveButton) {
+        document.getElementById('productName').value = '';
+        document.getElementById('productDescription').value = '';
+        document.getElementById('productPrice').value = '';
+        document.getElementById('productAderezos').value = '';
+        document.getElementById('productAvailable').checked = true;
+        
+        const categorySelect = document.getElementById('productCategory');
+        categorySelect.innerHTML = '<option value="">Seleccionar categoría...</option>';
+        
+        adminState.categories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = cat.nombre;
+            categorySelect.appendChild(option);
+        });
+        
+        saveButton.onclick = () => saveProduct();
+        saveButton.textContent = 'Guardar Producto';
+        
+        form.classList.remove('hidden');
+        title.textContent = 'Nuevo Producto';
+        
+        form.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+function hideProductForm() {
+    const form = document.getElementById('productForm');
+    if (form) {
+        form.classList.add('hidden');
+    }
+}
+
+function editProduct(productId) {
+    const product = adminState.products.find(p => p.id === productId);
+    if (!product) return;
+    
+    const form = document.getElementById('productForm');
+    const title = document.getElementById('productFormTitle');
+    const saveButton = document.getElementById('saveProductButton');
+    
+    if (!form || !title || !saveButton) return;
+    
+    document.getElementById('productName').value = product.nombre;
+    document.getElementById('productDescription').value = product.descripcion || '';
+    document.getElementById('productPrice').value = product.precio;
+    document.getElementById('productAvailable').checked = product.disponible !== false;
+    
+    document.getElementById('productAderezos').value = 
+        Array.isArray(product.aderezos_disponibles) 
+            ? product.aderezos_disponibles.join(', ')
+            : '';
+    
+    const categorySelect = document.getElementById('productCategory');
+    categorySelect.innerHTML = '<option value="">Seleccionar categoría...</option>';
+    
+    adminState.categories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.id;
+        option.textContent = cat.nombre;
+        if (cat.id === product.categoria) {
+            option.selected = true;
+        }
+        categorySelect.appendChild(option);
+    });
+    
+    saveButton.onclick = () => saveProduct(productId);
+    saveButton.textContent = 'Actualizar Producto';
+    
+    form.classList.remove('hidden');
+    title.textContent = 'Editar Producto';
+    
+    form.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function saveProduct(productId = null) {
+    const isNew = !productId;
+    
+    const productData = {
+        nombre: document.getElementById('productName').value.trim(),
+        descripcion: document.getElementById('productDescription').value.trim(),
+        precio: parseFloat(document.getElementById('productPrice').value),
+        categoria: document.getElementById('productCategory').value,
+        disponible: document.getElementById('productAvailable').checked,
+        aderezos_disponibles: document.getElementById('productAderezos').value
+            .split(',')
+            .map(a => a.trim())
+            .filter(a => a),
+        updated_at: new Date().toISOString()
+    };
+    
+    if (!productData.nombre) {
+        showNotification('El nombre del producto es requerido', 'error');
+        return;
+    }
+    
+    if (isNaN(productData.precio) || productData.precio < 0) {
+        showNotification('Precio inválido', 'error');
+        return;
+    }
+    
+    if (!productData.categoria) {
+        showNotification('Selecciona una categoría', 'error');
+        return;
+    }
+    
+    try {
+        if (isNew) {
+            const newId = productData.nombre.toLowerCase()
+                .replace(/[^a-z0-9áéíóúüñ]/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '') + '-' + Date.now().toString().slice(-6);
+            
+            productData.id = newId;
+            productData.fecha_creacion = new Date().toISOString();
+            
+            await db.collection('products').doc(newId).set(productData);
+            
+        } else {
+            await db.collection('products').doc(productId).update(productData);
+        }
+        
+        await loadProducts();
+        
+        // Aplicar filtro de búsqueda si existe
+        if (adminState.productSearchTerm) {
+            filterProducts(adminState.productSearchTerm);
+        }
+        
+        hideProductForm();
+        
+        showNotification(`Producto ${isNew ? 'agregado' : 'actualizado'} correctamente`, 'success');
+        
+    } catch (error) {
+        console.error('Error guardando producto:', error);
+        showNotification('Error al guardar el producto', 'error');
+    }
+}
+
+async function deleteProduct(productId) {
+    if (!confirm('¿Estás seguro de eliminar este producto?\n\nEsta acción no se puede deshacer.')) {
+        return;
+    }
+    
+    try {
+        await db.collection('products').doc(productId).delete();
+        
+        await loadProducts();
+        
+        // Aplicar filtro de búsqueda si existe
+        if (adminState.productSearchTerm) {
+            filterProducts(adminState.productSearchTerm);
+        }
+        
+        showNotification('Producto eliminado correctamente', 'success');
+        
+    } catch (error) {
+        console.error('Error eliminando producto:', error);
+        showNotification('Error al eliminar el producto', 'error');
+    }
+}
+
+// FUNCIONES DE UI - CATEGORÍAS
+function updateCategoriesGrid() {
+    const grid = document.getElementById('categoriesGrid');
+    if (!grid) return;
+    
+    if (adminState.categories.length === 0) {
+        grid.innerHTML = `
+            <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+                <i class="fas fa-folder" style="font-size: 3rem; color: #e5e7eb; margin-bottom: 20px;"></i>
+                <p style="color: #6b7280;">No hay categorías registradas</p>
+                <p style="font-size: 0.9rem; color: #9ca3af; margin-top: 10px;">
+                    Agrega categorías para organizar tus productos
+                </p>
+            </div>
+        `;
+        return;
+    }
+    
+    grid.innerHTML = '';
+    
+    adminState.categories.forEach(category => {
+        const productCount = adminState.products.filter(p => p.categoria === category.id).length;
+        
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid #e5e7eb;
+        `;
+        card.innerHTML = `
+            <h3 class="card-title" style="margin: 0 0 15px 0; color: #1e40af; font-size: 1.2rem;">${category.nombre}</h3>
+            <div style="margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.9rem; color: #6b7280; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-box"></i> ${productCount} producto${productCount !== 1 ? 's' : ''}
+                    </span>
+                    <span style="font-size: 0.8rem; color: #9ca3af; background: #f3f4f6; padding: 4px 10px; border-radius: 10px;">
+                        Orden: ${category.orden}
+                    </span>
+                </div>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 8px;">
+                <button class="action-button button-edit" onclick="editCategory('${category.id}')" style="flex: 1; background: #f59e0b; color: white; border: none; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <i class="fas fa-edit"></i> Editar
+                </button>
+                <button class="action-button button-delete" onclick="deleteCategory('${category.id}')" style="width: 40px; background: #ef4444; color: white; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;" ${productCount > 0 ? 'disabled title="No se puede eliminar categorías con productos"' : ''}>
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        grid.appendChild(card);
+    });
+}
+
+function editCategory(categoryId) {
+    const category = adminState.categories.find(c => c.id === categoryId);
+    if (!category) return;
+    
+    document.getElementById('categoryName').value = category.nombre;
+    document.getElementById('categoryOrder').value = category.orden || 1;
+    
+    document.getElementById('categoryFormTitle').textContent = 'Editar Categoría';
+    document.getElementById('addCategoryButton').textContent = 'Actualizar Categoría';
+    document.getElementById('addCategoryButton').dataset.editingId = categoryId;
+    document.getElementById('cancelEditCategoryButton').style.display = 'inline-block';
+    
+    document.getElementById('categoryName').focus();
+}
+
+async function addCategory() {
+    const nameInput = document.getElementById('categoryName');
+    const orderInput = document.getElementById('categoryOrder');
+    const addButton = document.getElementById('addCategoryButton');
+    
+    const name = nameInput.value.trim();
+    const order = parseInt(orderInput.value);
+    const isEditing = addButton.dataset.editingId;
+    
+    if (!name) {
+        showNotification('El nombre de la categoría es requerido', 'error');
+        return;
+    }
+    
+    if (isNaN(order) || order < 1) {
+        showNotification('El orden debe ser un número mayor a 0', 'error');
+        return;
+    }
+    
+    try {
+        if (isEditing) {
+            await db.collection('categories').doc(isEditing).update({
+                nombre: name,
+                orden: order,
+                updated_at: new Date().toISOString()
+            });
+            
+            cancelEditCategory();
+            
+            showNotification('Categoría actualizada correctamente', 'success');
+            
+        } else {
+            const id = name.toLowerCase()
+                .replace(/[^a-z0-9áéíóúüñ]/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+            
+            await db.collection('categories').doc(id).set({
+                id,
+                nombre: name,
+                orden: order,
+                fecha_creacion: new Date().toISOString()
+            });
+            
+            nameInput.value = '';
+            orderInput.value = adminState.categories.length + 1;
+            
+            showNotification('Categoría agregada correctamente', 'success');
+        }
+        
+        await loadCategories();
+        updateCategoriesGrid();
+        
+    } catch (error) {
+        console.error('Error guardando categoría:', error);
+        
+        if (error.code === 'permission-denied') {
+            showNotification('No tienes permisos para realizar esta acción', 'error');
+        } else {
+            showNotification('Error al guardar la categoría', 'error');
+        }
+    }
+}
+
+async function deleteCategory(categoryId) {
+    const productsInCategory = adminState.products.filter(p => p.categoria === categoryId);
+    
+    if (productsInCategory.length > 0) {
+        showNotification(`No se puede eliminar la categoría porque tiene ${productsInCategory.length} producto(s). Reasigna los productos primero.`, 'error');
+        return;
+    }
+    
+    if (!confirm('¿Estás seguro de eliminar esta categoría?\n\nEsta acción no se puede deshacer.')) {
+        return;
+    }
+    
+    try {
+        await db.collection('categories').doc(categoryId).delete();
+        
+        await loadCategories();
+        updateCategoriesGrid();
+        
+        showNotification('Categoría eliminada correctamente', 'success');
+        
+    } catch (error) {
+        console.error('Error eliminando categoría:', error);
+        showNotification('Error al eliminar la categoría', 'error');
+    }
+}
+
+function cancelEditCategory() {
+    document.getElementById('categoryFormTitle').textContent = 'Agregar Nueva Categoría';
+    document.getElementById('addCategoryButton').textContent = 'Agregar Categoría';
+    document.getElementById('cancelEditCategoryButton').style.display = 'none';
+    
+    document.getElementById('categoryName').value = '';
+    document.getElementById('categoryOrder').value = adminState.categories.length + 1;
+    
+    const addButton = document.getElementById('addCategoryButton');
+    if (addButton.dataset.editingId) {
+        delete addButton.dataset.editingId;
+    }
+}
+
+// FUNCIONES DE CONFIGURACIÓN
+function updateSettingsForm() {
+    if (!adminState.settings) return;
+    
+    const settings = adminState.settings;
+    
+    const storeNameEl = document.getElementById('storeName');
+    const whatsappPhoneEl = document.getElementById('whatsappPhone');
+    
+    if (storeNameEl) storeNameEl.value = settings.nombre_local || '';
+    if (whatsappPhoneEl) whatsappPhoneEl.value = settings.telefono_whatsapp || '';
+    
+    const hoursContainer = document.getElementById('hoursContainer');
+    hoursContainer.innerHTML = '';
+    
+    const days = [
+        { key: 'lunes', label: 'Lunes' },
+        { key: 'martes', label: 'Martes' },
+        { key: 'miércoles', label: 'Miércoles' },
+        { key: 'jueves', label: 'Jueves' },
+        { key: 'viernes', label: 'Viernes' },
+        { key: 'sábado', label: 'Sábado' },
+        { key: 'domingo', label: 'Domingo' }
+    ];
+    
+    days.forEach(day => {
+        const div = document.createElement('div');
+        div.className = 'form-group';
+        div.innerHTML = `
+            <label class="form-label">${day.label}</label>
+            <input type="text" class="form-input" 
+                   id="hours_${day.key}" 
+                   value="${settings.horarios_por_dia?.[day.key] || '11:00 - 23:00'}"
+                   placeholder="Ej: 11:00 - 23:00 o Cerrado">
+        `;
+        hoursContainer.appendChild(div);
+    });
+    
+    var closedMsgEl = document.getElementById('closedMessage');
+    var deliveryPriceEl = document.getElementById('deliveryPrice');
+    var baseTimeEl = document.getElementById('baseDeliveryTime');
+    var retiroEnabledEl = document.getElementById('retiroEnabled');
+    var envioEnabledEl = document.getElementById('envioEnabled');
+    
+    if (closedMsgEl) closedMsgEl.value = settings.mensaje_cerrado || '';
+    if (deliveryPriceEl) deliveryPriceEl.value = settings.precio_envio || 0;
+    if (baseTimeEl) baseTimeEl.value = settings.tiempo_base_estimado || 30;
+    if (retiroEnabledEl) retiroEnabledEl.checked = settings.retiro_habilitado !== false;
+    if (envioEnabledEl) envioEnabledEl.checked = settings.envio_habilitado !== false;
+}
+
+async function saveSettings() {
+    var storeNameEl = document.getElementById('storeName');
+    var whatsappPhoneEl = document.getElementById('whatsappPhone');
+    var closedMessageEl = document.getElementById('closedMessage');
+    var deliveryPriceEl = document.getElementById('deliveryPrice');
+    var baseDeliveryTimeEl = document.getElementById('baseDeliveryTime');
+    var retiroEnabledEl = document.getElementById('retiroEnabled');
+    var envioEnabledEl = document.getElementById('envioEnabled');
+    
+    if (!storeNameEl || !whatsappPhoneEl || !deliveryPriceEl) {
+        console.error('Error: Elementos del formulario no encontrados');
+        showNotification('Error al guardar: formulario no encontrado', 'error');
+        return;
+    }
+    
+    const settingsData = {
+        nombre_local: storeNameEl.value.trim(),
+        telefono_whatsapp: whatsappPhoneEl.value.trim(),
+        horarios_por_dia: {},
+        mensaje_cerrado: closedMessageEl ? closedMessageEl.value.trim() : '',
+        precio_envio: parseInt(deliveryPriceEl.value) || 0,
+        tiempo_base_estimado: parseInt(baseDeliveryTimeEl.value) || 30,
+        retiro_habilitado: retiroEnabledEl ? retiroEnabledEl.checked : true,
+        envio_habilitado: envioEnabledEl ? envioEnabledEl.checked : true,
+        updated_at: new Date().toISOString()
+    };
+    
+    const days = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+    days.forEach(day => {
+        const input = document.getElementById(`hours_${day}`);
+        if (input) {
+            settingsData.horarios_por_dia[day] = input.value.trim();
+        }
+    });
+    
+    try {
+        await db.collection('settings').doc('config').update(settingsData);
+        
+        adminState.settings = { ...adminState.settings, ...settingsData };
+        
+        updateStoreStatus();
+        
+        showNotification('Configuración guardada correctamente', 'success');
+        
+    } catch (error) {
+        console.error('Error guardando configuración:', error);
+        showNotification('Error al guardar la configuración', 'error');
+    }
+}
+
+function updateStoreStatus() {
+    if (!adminState.settings) return;
+    
+    const statusElement = document.getElementById('storeStatus');
+    const statusValueElement = document.getElementById('storeStatusValue');
+    const toggle = document.getElementById('storeToggle');
+    const toggleLabel = document.getElementById('storeToggleLabel');
+    
+    if (!statusElement || !statusValueElement || !toggle || !toggleLabel) return;
+    
+    const isOpen = adminState.settings.abierto !== false;
+    
+    if (isOpen) {
+        statusElement.textContent = '📍 Local ABIERTO';
+        statusElement.style.color = '#10b981';
+        statusValueElement.textContent = 'ABIERTO';
+        statusValueElement.style.color = '#10b981';
+        toggle.checked = true;
+        toggleLabel.textContent = 'Abierto';
+    } else {
+        statusElement.textContent = '📍 Local CERRADO';
+        statusElement.style.color = '#ef4444';
+        statusValueElement.textContent = 'CERRADO';
+        statusValueElement.style.color = '#ef4444';
+        toggle.checked = false;
+        toggleLabel.textContent = 'Cerrado';
+    }
+}
+
+async function toggleStoreStatus(checkbox) {
+    const isOpen = checkbox.checked;
+    
+    try {
+        await db.collection('settings').doc('config').update({
+            abierto: isOpen,
+            updated_at: new Date().toISOString()
+        });
+        
+        adminState.settings.abierto = isOpen;
+        
+        updateStoreStatus();
+        
+        showNotification(`Local ${isOpen ? 'abierto' : 'cerrado'} correctamente`, 'success');
+        
+    } catch (error) {
+        console.error('Error cambiando estado:', error);
+        showNotification('Error al cambiar el estado del local', 'error');
+        checkbox.checked = !isOpen;
+    }
+}
+
+// FUNCIONES DE INICIALIZACIÓN
+async function loadAllData() {
+    try {
+        showLoading(true);
+        
+        adminState.settings = await getSettings();
+        if (!adminState.settings) {
+            await initializeDefaultSettings();
+            adminState.settings = await getSettings();
+        }
+        
+        await loadOrders();
+        await loadProducts();
+        await loadCategories();
+        
+        // Marcar que la carga inicial completósolo notifica pedidos nuevos a partir de ahora
+        adminState.initialLoadComplete = true;
+        
+        // Inicializar el set de pedidos notificados con los existentes
+        adminState.orders.forEach(order => adminState.notifiedOrderIds.add(order.id));
+        
+        applyOrderFilter('hoy');
+        
+        updateDashboard();
+        updateOrdersTable();
+        updateProductsGrid();
+        updateCategoriesGrid();
+        updateSettingsForm();
+        updateStoreStatus();
+        
+        console.log('✅ Datos cargados correctamente');
+        
+    } catch (error) {
+        console.error('Error cargando datos:', error);
+        showNotification('Error cargando datos del sistema', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// FUNCIONES DE REPORTES
+async function generateReport() {
+    const period = document.getElementById('reportPeriod').value;
+    const dateFrom = document.getElementById('reportDateFrom').value;
+    const dateTo = document.getElementById('reportDateTo').value;
+    
+    let startDate, endDate;
+    
+    const now = new Date();
+    
+    switch(period) {
+        case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+            
+        case 'yesterday':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+            break;
+            
+        case 'week':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+            
+        case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+            endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            break;
+            
+        case 'custom':
+            if (!dateFrom || !dateTo) {
+                showNotification('Selecciona ambas fechas para el período personalizado', 'error');
+                return;
+            }
+            startDate = new Date(dateFrom);
+            endDate = new Date(dateTo);
+            endDate.setHours(23, 59, 59);
+            break;
+    }
+    
+    try {
+        const filteredOrders = adminState.orders.filter(order => {
+            if (!order.fecha) return false;
+            const orderDate = order.fecha.toDate ? order.fecha.toDate() : new Date(order.fecha);
+            return orderDate >= startDate && orderDate <= endDate;
+        });
+        
+        const totalOrders = filteredOrders.length;
+        const totalSales = filteredOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+        const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
+        
+        const statusCount = {
+            Recibido: 0,
+            'En preparación': 0,
+            Listo: 0,
+            Entregado: 0,
+            Cancelado: 0
+        };
+        
+        filteredOrders.forEach(order => {
+            const status = order.estado || 'Recibido';
+            if (statusCount[status] !== undefined) {
+                statusCount[status]++;
+            }
+        });
+        
+        const reportSummary = document.getElementById('reportSummary');
+        if (reportSummary) {
+            reportSummary.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px;">
+                    <div class="card">
+                        <h4 style="color: #6b7280; font-size: 0.9rem; margin-bottom: 5px;">Total Pedidos</h4>
+                        <div style="font-size: 2rem; font-weight: 800; color: #1e40af;">${totalOrders}</div>
+                    </div>
+                    
+                    <div class="card">
+                        <h4 style="color: #6b7280; font-size: 0.9rem; margin-bottom: 5px;">Ventas Totales</h4>
+                        <div style="font-size: 2rem; font-weight: 800; color: #10b981;">$${totalSales}</div>
+                    </div>
+                    
+                    <div class="card">
+                        <h4 style="color: #6b7280; font-size: 0.9rem; margin-bottom: 5px;">Ticket Promedio</h4>
+                        <div style="font-size: 2rem; font-weight: 800; color: #f59e0b;">$${avgOrderValue.toFixed(2)}</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h4 style="margin-bottom: 15px;">Distribución por Estado</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+                        ${Object.entries(statusCount).map(([status, count]) => `
+                            <div style="text-align: center; padding: 15px; background: #f8fafc; border-radius: 8px;">
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #1e40af;">${count}</div>
+                                <div style="font-size: 0.9rem; color: #6b7280; margin-top: 5px;">${status}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        
+        updateSalesChart(filteredOrders);
+        
+        showNotification(`Reporte generado para ${period === 'custom' ? 'período personalizado' : period}`, 'success');
+        
+    } catch (error) {
+        console.error('Error generando reporte:', error);
+        showNotification('Error al generar el reporte', 'error');
+    }
+}
+
+function updateSalesChart(orders) {
+    const ctx = document.getElementById('salesChart');
+    if (!ctx) return;
+    
+    if (window.salesChartInstance) {
+        window.salesChartInstance.destroy();
+    }
+    
+    const salesByDay = {};
+    orders.forEach(order => {
+        if (!order.fecha) return;
+        
+        const orderDate = order.fecha.toDate ? order.fecha.toDate() : new Date(order.fecha);
+        const dateStr = orderDate.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short'
+        });
+        
+        if (!salesByDay[dateStr]) {
+            salesByDay[dateStr] = 0;
+        }
+        salesByDay[dateStr] += order.total || 0;
+    });
+    
+    const labels = Object.keys(salesByDay);
+    const data = Object.values(salesByDay);
+    
+    window.salesChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Ventas por día',
+                data: data,
+                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                borderColor: '#3b82f6',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value;
+                        }
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+// FUNCIONES UTILITARIAS ADICIONALES
+async function forceRefreshOrders() {
+    try {
+        showLoading(true);
+        
+        await loadOrders();
+        applyOrderFilter(adminState.currentFilter);
+        updateDashboard();
+        
+        showNotification('✅ Pedidos actualizados manualmente', 'success');
+        
+    } catch (error) {
+        console.error('Error forzando actualización:', error);
+        showNotification('Error al actualizar', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+function debugRealtimeUpdates() {
+    console.log('🔍 DEBUG - Estado del sistema:');
+    console.log('- Pedidos cargados:', adminState.orders.length);
+    console.log('- Pedidos filtrados:', adminState.filteredOrders.length);
+    console.log('- Pestaña actual:', adminState.currentTab);
+    console.log('- Filtro actual:', adminState.currentFilter);
+    console.log('- Último pedido ID:', adminState.lastOrderId);
+    console.log('- Realtime habilitado:', adminState.realtimeEnabled);
+    console.log('- Suscripciones activas:', {
+        orders: ordersUnsubscribe ? 'ACTIVA' : 'INACTIVA',
+        products: productsUnsubscribe ? 'ACTIVA' : 'INACTIVA',
+        categories: categoriesUnsubscribe ? 'ACTIVA' : 'INACTIVA',
+        settings: settingsUnsubscribe ? 'ACTIVA' : 'INACTIVA'
+    });
+    
+    // Verificar conexión
+    db.collection('orders').limit(1).get()
+        .then(snap => {
+            console.log('✅ Conexión a Firestore: OK');
+            if (!snap.empty) {
+                console.log('📡 Último pedido en DB:', snap.docs[0].id);
+            }
+        })
+        .catch(err => console.error('❌ Error conexión Firestore:', err));
+}
+
+// EVENT LISTENERS
+function setupAdminEventListeners() {
+    const logoutButton = document.getElementById('logoutButton');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', () => {
+            if (confirm('¿Estás seguro de cerrar sesión?')) {
+                stopRealtimeUpdates();
+                window.auth.signOut();
+            }
+        });
+    }
+    
+    document.querySelectorAll('.nav-button').forEach(button => {
+        button.addEventListener('click', () => {
+            const tab = button.dataset.tab;
+            
+            document.querySelectorAll('.nav-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            button.classList.add('active');
+            
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            const tabElement = document.getElementById(`${tab}Tab`);
+            if (tabElement) {
+                tabElement.classList.add('active');
+            }
+            
+            adminState.currentTab = tab;
+            
+            if (tab === 'orders') {
+                updateOrdersTable();
+            } else if (tab === 'products') {
+                updateProductsGrid();
+            } else if (tab === 'dashboard') {
+                updateDashboard();
+            }
+        });
+    });
+    
+    const orderFilter = document.getElementById('orderFilter');
+    if (orderFilter) {
+        orderFilter.addEventListener('change', function() {
+            applyOrderFilter(this.value);
+        });
+    }
+    
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    if (clearHistoryBtn) {
+        clearHistoryBtn.addEventListener('click', clearOrderHistory);
+    }
+    
+    const clearAllBtn = document.getElementById('clearAllOrdersBtn');
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', clearAllOrders);
+    }
+    
+    const addProductButton = document.getElementById('addProductButton');
+    if (addProductButton) {
+        addProductButton.addEventListener('click', () => {
+            showNewProductForm();
+        });
+    }
+    
+    const cancelProductFormButton = document.getElementById('cancelProductFormButton');
+    if (cancelProductFormButton) {
+        cancelProductFormButton.addEventListener('click', hideProductForm);
+    }
+    
+    const addCategoryButton = document.getElementById('addCategoryButton');
+    if (addCategoryButton) {
+        addCategoryButton.addEventListener('click', addCategory);
+    }
+    
+    const cancelEditButton = document.getElementById('cancelEditCategoryButton');
+    if (cancelEditButton) {
+        cancelEditButton.addEventListener('click', cancelEditCategory);
+    }
+    
+    const storeToggle = document.getElementById('storeToggle');
+    if (storeToggle) {
+        storeToggle.addEventListener('change', function() {
+            toggleStoreStatus(this);
+        });
+    }
+    
+    const saveSettingsButton = document.getElementById('saveSettingsButton');
+    if (saveSettingsButton) {
+        saveSettingsButton.addEventListener('click', saveSettings);
+    }
+    
+    const reportPeriod = document.getElementById('reportPeriod');
+    if (reportPeriod) {
+        reportPeriod.addEventListener('change', function() {
+            const customRange = document.getElementById('customDateRange');
+            if (customRange) {
+                customRange.style.display = this.value === 'custom' ? 'block' : 'none';
+            }
+        });
+    }
+    
+    const generateReportButton = document.getElementById('generateReportButton');
+    if (generateReportButton) {
+        generateReportButton.addEventListener('click', generateReport);
+    }
+    
+    const closeModalButton = document.getElementById('closeModalButton');
+    if (closeModalButton) {
+        closeModalButton.addEventListener('click', () => {
+            document.getElementById('orderModal').style.display = 'none';
+        });
+    }
+    
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', () => {
+            document.getElementById('orderModal').style.display = 'none';
+        });
+    }
+    
+    const orderModal = document.getElementById('orderModal');
+    if (orderModal) {
+        orderModal.addEventListener('click', (e) => {
+            if (e.target === orderModal) {
+                orderModal.style.display = 'none';
+            }
+        });
+    }
+    
+    // Botón de actualización manual
+    const refreshButton = document.createElement('button');
+    refreshButton.className = 'button-secondary';
+    refreshButton.style.cssText = 'margin-left: 10px; padding: 8px 12px; display: flex; align-items: center; gap: 6px;';
+    refreshButton.innerHTML = '<i class="fas fa-sync-alt"></i> Actualizar';
+    refreshButton.onclick = forceRefreshOrders;
+    
+    const filterControls = document.querySelector('.filter-controls');
+    if (filterControls) {
+        filterControls.querySelector('.filter-left')?.appendChild(refreshButton);
+    }
+    
+    // Botón de debug (solo en desarrollo)
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        const debugButton = document.createElement('button');
+        debugButton.className = 'button-secondary';
+        debugButton.style.cssText = 'margin-left: 10px; padding: 8px 12px; background: #6b7280; display: flex; align-items: center; gap: 6px;';
+        debugButton.innerHTML = '<i class="fas fa-bug"></i> Debug';
+        debugButton.onclick = debugRealtimeUpdates;
+        filterControls?.querySelector('.filter-left')?.appendChild(debugButton);
+    }
+}
+
+function setupLoginEvents() {
+    const loginButton = document.getElementById('loginButton');
+    const passwordInput = document.getElementById('passwordInput');
+    
+    if (loginButton) {
+        loginButton.addEventListener('click', handleLogin);
+    }
+    
+    if (passwordInput) {
+        passwordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleLogin();
+        });
+    }
+}
+
+async function handleLogin() {
+    const email = document.getElementById('emailInput').value;
+    const password = document.getElementById('passwordInput').value;
+    const errorElement = document.getElementById('loginError');
+    
+    if (!email || !password) {
+        showError('Por favor completa todos los campos', errorElement);
+        return;
+    }
+    
+    try {
+        showLoading(true);
+        await window.auth.signInWithEmailAndPassword(email, password);
+        hideError(errorElement);
+    } catch (error) {
+        console.error('Login error:', error);
+        showError('Error al iniciar sesión. Verifica tus credenciales.', errorElement);
+    } finally {
+        showLoading(false);
+    }
+}
+
+function showAdminPanel() {
+    document.getElementById('loginContainer').style.display = 'none';
+    document.getElementById('adminContainer').style.display = 'block';
+}
+
+function showLoginScreen() {
+    document.getElementById('loginContainer').style.display = 'block';
+    document.getElementById('adminContainer').style.display = 'none';
+}
+
+// INICIALIZACIÓN PRINCIPAL
+async function initAdminApp() {
+    if (adminAppInitialized) {
+        console.log('⚠️ Admin already initialized; skipping duplicate initialization.');
+        return;
+    }
+    adminAppInitialized = true;
+    try {
+        console.log('🚀 Inicializando Panel Admin...');
+        
+        // Solicitar permiso de notificaciones
+        requestNotificationPermission();
+        
+        // Verificar conexión a Supabase y esperar a que esté lista
+        let attempts = 0;
+        while (!window.supabase && attempts < 50) {
+            await new Promise(r => setTimeout(r, 100));
+            attempts++;
+        }
+        
+        if (!window.supabase) {
+            showNotification('Error: Supabase no está inicializado', 'error');
+            console.error('❌ Supabase no disponible después de 5 segundos');
+            return;
+        }
+        
+        // Verificar que el adaptador esté configurado (db y auth)
+        attempts = 0;
+        while ((!window.db || !window.auth) && attempts < 50) {
+            await new Promise(r => setTimeout(r, 100));
+            attempts++;
+        }
+        
+        if (!window.db || !window.auth) {
+            showNotification('Error: Adaptador de base de datos no configurado', 'error');
+            console.error('❌ Adaptador DB no disponible después de 5 segundos');
+            return;
+        }
+        
+        console.log('✅ Supabase y adaptador configurados');
+        
+        // Configurar auth con Supabase (fallback si Firebase no está)
+        if (!(window.auth && typeof window.auth.onAuthStateChanged === 'function')) {
+            console.warn('Firebase Auth no disponible; usando Supabase si existe.');
+            (async () => {
+                try {
+                    let user = null;
+                    if (window.supabase && window.supabase.auth && typeof window.supabase.auth.getSession === 'function') {
+                        const { data } = await window.supabase.auth.getSession();
+                        const sess = data?.session;
+                        if (sess?.user) user = { id: sess.user.id, email: sess.user.email };
+                    }
+                    if (user) {
+                        const isAdmin = await checkAdminStatus(user);
+                        if (!isAdmin) {
+                            showNotification('🚫 No tienes acceso al panel de administración', 'error');
+                            await (window.supabase?.auth?.signOut?.())?.();
+                            showLoginScreen();
+                            showError('No tienes permisos de administrador', document.getElementById('loginError'));
+                            return;
+                        }
+                        adminState.currentUser = user;
+                        adminState.isAdmin = true;
+                        showAdminPanel();
+                        const userAvatar = document.getElementById('userAvatar');
+                        if (userAvatar) {
+                            const initials = user.email ? user.email.substring(0, 2).toUpperCase() : 'AD';
+                            userAvatar.innerHTML = initials;
+                            userAvatar.style.background = 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)';
+                        }
+                        await loadAllData();
+                        setupAdminEventListeners();
+                        setTimeout(() => startRealtimeUpdates(), 1000);
+                        if (!sessionStorage.getItem('admin_notified')) {
+                            showNotification('✅ Panel admin conectado - Actualizaciones en tiempo real activadas', 'success');
+                            sessionStorage.setItem('admin_notified', '1');
+                        }
+                    } else {
+                        showLoginScreen();
+                        stopRealtimeUpdates();
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback auth error:', fallbackError);
+                    showLoginScreen();
+                    stopRealtimeUpdates();
+                }
+            })();
+        } else {
+            // Firebase está disponible: ruta original
+            window.auth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    const isAdmin = await checkAdminStatus(user);
+                    if (!isAdmin) {
+                        showNotification('🚫 No tienes acceso al panel de administración', 'error');
+                        await window.auth.signOut();
+                        showLoginScreen();
+                        showError('No tienes permisos de administrador', document.getElementById('loginError'));
+                        return;
+                    }
+                    adminState.currentUser = user;
+                    adminState.isAdmin = true;
+                    showAdminPanel();
+                    const userAvatar = document.getElementById('userAvatar');
+                    if (userAvatar) {
+                        const initials = user.email ? user.email.substring(0, 2).toUpperCase() : 'AD';
+                        userAvatar.innerHTML = initials;
+                        userAvatar.style.background = 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)';
+                    }
+                    await loadAllData();
+                    setupAdminEventListeners();
+                    setTimeout(() => startRealtimeUpdates(), 1000);
+                    if (!sessionStorage.getItem('admin_notified')) {
+                        showNotification('✅ Panel admin conectado - Actualizaciones en tiempo real activadas', 'success');
+                        sessionStorage.setItem('admin_notified', '1');
+                    }
+                } else {
+                    showLoginScreen();
+                    stopRealtimeUpdates();
+                }
+            });
+        }
+
+        setupLoginEvents();
+        
+        console.log('✅ Panel Admin inicializado');
+        
+    } catch (error) {
+        console.error('❌ Error inicializando admin:', error);
+        showNotification('Error inicializando el sistema', 'error');
+    }
+}
+
+// AGREGAR ESTILOS DE ANIMACIÓN
+document.addEventListener('DOMContentLoaded', function() {
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        @keyframes highlightRow {
+            0% { background-color: #f0f9ff; }
+            100% { background-color: transparent; }
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Agregar elementos de audio si no existen
+    if (!document.getElementById('notificationSound')) {
+        const notificationSound = document.createElement('audio');
+        notificationSound.id = 'notificationSound';
+        notificationSound.preload = 'auto';
+        notificationSound.style.display = 'none';
+        notificationSound.src = '/assets/mixkit-correct-answer-tone-2870.mp3';
+        notificationSound.onerror = () => {
+            notificationSound.src = 'https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3';
+        };
+        document.body.appendChild(notificationSound);
+    }
+    
+    if (!document.getElementById('newOrderSound')) {
+        const newOrderSound = document.createElement('audio');
+        newOrderSound.id = 'newOrderSound';
+        newOrderSound.preload = 'auto';
+        newOrderSound.style.display = 'none';
+        newOrderSound.src = '/assets/mixkit-alert-quick-chime-766.mp3';
+        newOrderSound.onerror = () => {
+            newOrderSound.src = 'https://assets.mixkit.co/sfx/preview/mixkit-alert-quick-chime-766.mp3';
+        };
+        document.body.appendChild(newOrderSound);
+    }
+});
+
+// INICIALIZAR LA APLICACIÓN (llamado desde admin.html)
+// Nota: initAdminApp ya se llama desde admin.html después de initSupabase()
+// Eliminado event listener duplicado para evitar doble inicialización
+window.addEventListener('beforeunload', stopRealtimeUpdates);
+
+// EXPORTAR FUNCIONES GLOBALES
+window.updateOrderStatus = updateOrderStatus;
+window.updateOrderTime = updateOrderTime;
+window.showOrderDetails = showOrderDetails;
+window.openWhatsAppAdmin = openWhatsAppAdmin;
+window.editProduct = editProduct;
+window.deleteProduct = deleteProduct;
+window.editCategory = editCategory;
+window.deleteCategory = deleteCategory;
+window.toggleStoreStatus = toggleStoreStatus;
+window.addCategory = addCategory;
+window.cancelEditCategory = cancelEditCategory;
+window.applyOrderFilter = applyOrderFilter;
+window.clearOrderHistory = clearOrderHistory;
+window.clearAllOrders = clearAllOrders;
+window.forceRefreshOrders = forceRefreshOrders;
+window.debugRealtimeUpdates = debugRealtimeUpdates;
+window.toggleRealtimeUpdates = toggleRealtimeUpdates;
+window.showNotification = showNotification;
+window.showNewOrderAlert = showNewOrderAlert;
+window.filterProducts = filterProducts;
+window.checkAdminStatus = checkAdminStatus;
+window.addAdmin = addAdmin;
+window.getAdminsList = getAdminsList;

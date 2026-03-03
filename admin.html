@@ -1,0 +1,2073 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFM Orders - Panel Admin</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#020617">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AFM Admin">
+    <link rel="manifest" href="manifest-admin.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>">
+    
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="firebase-to-supabase-adapter.js"></script>
+    <script src="supabase-config.js"></script>
+    
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* RESET Y VARIABLES */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+        
+        :root {
+            --fondo-principal: #020617;
+            --fondo-card: rgba(255, 255, 255, 0.05);
+            --texto-primary: #f8fafc;
+            --texto-secondary: #94a3b8;
+            --azul-primario: #4f46e5;
+            --azul-secundario: #7c3aed;
+            --azul-claro: #06b6d4;
+            --amarillo: #06b6d4;
+            --verde: #10b981;
+            --rojo: #ef4444;
+            --rojo-oscuro: #7f1d1d;
+            --gris-oscuro: #1e293b;
+            --gris-medio: #94a3b8;
+            --gris-claro: #0f172a;
+            --gris-border: rgba(255, 255, 255, 0.08);
+            --blanco: #f8fafc;
+            --sombra: 0 10px 40px rgba(79, 70, 229, 0.2);
+            --sombra-neon: 0 0 20px rgba(79, 70, 229, 0.4);
+            --sombra-cyan: 0 0 20px rgba(6, 182, 212, 0.4);
+            --gradiente-azul: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --gradiente-cyan: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+            --gradiente-amarillo: linear-gradient(135deg, #06b6d0 0%, #0891b2 100%);
+            --border-glow: 1px solid rgba(79, 70, 229, 0.3);
+        }
+        
+        body {
+            background: var(--fondo-principal);
+            color: var(--texto-primary);
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 20%, rgba(79, 70, 229, 0.15) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        /* PANTALLA DE LOGIN */
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(20px);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), var(--sombra-neon);
+            text-align: center;
+            border: var(--border-glow);
+        }
+        
+        .login-logo {
+            width: 80px;
+            height: 80px;
+            background: var(--gradiente-cyan);
+            border-radius: 50%;
+            margin: 0 auto 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            color: white;
+            box-shadow: var(--sombra-cyan);
+        }
+        
+        .login-title {
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .login-subtitle {
+            color: var(--texto-secondary);
+            margin-bottom: 32px;
+            font-size: 0.95rem;
+        }
+        
+        .login-input {
+            width: 100%;
+            padding: 16px;
+            margin: 12px 0;
+            border: 2px solid var(--gris-border);
+            border-radius: 12px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .login-input:focus {
+            border-color: var(--azul-primario);
+            outline: none;
+        }
+        
+        .login-button {
+            width: 100%;
+            padding: 16px;
+            background: var(--gradiente-cyan);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 16px;
+            transition: transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: var(--sombra-cyan);
+        }
+        
+        .login-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 30px rgba(6, 182, 212, 0.5);
+        }
+        
+        .login-links {
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+        }
+        
+        .login-link {
+            color: var(--azul-primario);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .login-link:hover {
+            text-decoration: underline;
+        }
+        
+        .login-error {
+            color: var(--rojo);
+            margin-top: 12px;
+            font-size: 14px;
+            display: none;
+            padding: 10px;
+            background: #fee2e2;
+            border-radius: 8px;
+            border-left: 4px solid var(--rojo);
+        }
+        
+        /* PANEL ADMIN */
+        .admin-container {
+            display: none;
+        }
+        
+        .admin-header {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            color: var(--texto-primary);
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), var(--sombra-neon);
+            border-bottom: 1px solid var(--gris-border);
+        }
+        
+        .admin-title h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .admin-title p {
+            font-size: 0.875rem;
+            color: var(--texto-secondary);
+        }
+        
+        .admin-user {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            background: var(--amarillo-primario);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--azul-primario);
+        }
+        
+        .logout-button {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.15);
+            border: none;
+            border-radius: 8px;
+            color: var(--blanco);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .logout-button:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+        
+        /* NAVEGACIÓN */
+        .admin-nav {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 16px 30px;
+            background: var(--blanco);
+            border-bottom: 1px solid var(--gris-border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .nav-button {
+            padding: 12px 24px;
+            border: none;
+            background: var(--gris-claro);
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.3s;
+            color: var(--gris-medio);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+        }
+        
+        .nav-button:hover {
+            background: var(--gris-border);
+        }
+        
+        .nav-button.active {
+            background: var(--gradiente-azul);
+            color: var(--blanco);
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.2);
+        }
+        
+        /* CONTENIDO PRINCIPAL */
+        .admin-content {
+            padding: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* SECCIONES COMUNES */
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 24px;
+            color: var(--azul-primario);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .section-title i {
+            font-size: 1.5rem;
+        }
+        
+        /* TARJETAS DE ESTADÍSTICAS */
+        .cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+        
+        .card {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s;
+            border: 1px solid var(--gris-border);
+        }
+        
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), var(--sombra-neon);
+        }
+        
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--texto-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .card-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+        
+        .card-subtitle {
+            color: var(--gris-medio);
+            font-size: 0.875rem;
+        }
+        
+        /* BADGES DE ESTADO */
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-recibido {
+            background: var(--azul-claro);
+            color: var(--azul-primario);
+            border: 1px solid #93c5fd;
+        }
+        
+        .status-preparacion {
+            background: var(--amarillo-claro);
+            color: var(--amarillo-primario);
+            border: 1px solid #fcd34d;
+        }
+        
+        .status-listo {
+            background: #dcfce7;
+            color: var(--verde);
+            border: 1px solid #6ee7b7;
+        }
+        
+        .status-entregado {
+            background: var(--gris-claro);
+            color: var(--gris-medio);
+            border: 1px solid #d1d5db;
+        }
+        
+        /* TABLAS */
+        .table-container {
+            background: var(--blanco);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: var(--sombra);
+            margin-bottom: 30px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+        
+        thead {
+            background: rgba(6, 182, 212, 0.1);
+        }
+        
+        th {
+            padding: 16px 20px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--texto-secondary);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid var(--gris-border);
+        }
+        
+        td {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--gris-border);
+            vertical-align: top;
+            color: var(--texto-primary);
+        }
+        
+        tbody tr:hover {
+            background: rgba(6, 182, 212, 0.05);
+        }
+        
+        /* BOTONES DE ACCIÓN */
+        .action-button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .button-whatsapp {
+            background: #25D366;
+            color: var(--blanco);
+        }
+        
+        .button-whatsapp:hover {
+            background: #128C7E;
+        }
+        
+        .button-edit {
+            background: var(--amarillo-primario);
+            color: var(--azul-primario);
+        }
+        
+        .button-edit:hover {
+            background: var(--amarillo-secundario);
+        }
+        
+        .button-delete {
+            background: var(--rojo);
+            color: var(--blanco);
+        }
+        
+        .button-delete:hover {
+            background: #dc2626;
+        }
+        
+        .button-primary {
+            background: var(--gradiente-cyan);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            box-shadow: var(--sombra-cyan);
+        }
+        
+        .button-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 30px rgba(6, 182, 212, 0.5);
+        }
+        
+        .button-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--texto-primary);
+            border: 1px solid var(--gris-border);
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .button-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #06b6d4;
+        }
+        
+        /* BOTONES DE PELIGRO */
+        .button-danger {
+            background: var(--rojo);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        
+        .button-danger:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+        }
+        
+        .button-danger-extreme {
+            background: var(--rojo-oscuro);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        
+        .button-danger-extreme:hover {
+            background: #991b1b;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(127, 29, 29, 0.2);
+        }
+        
+        /* CONTROLES DE FILTRO */
+        .filter-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 12px;
+        }
+        
+        .filter-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .filter-label {
+            font-weight: 600;
+            color: #4b5563;
+            white-space: nowrap;
+        }
+        
+        .filter-select {
+            padding: 10px 15px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: white;
+            color: #1f2937;
+            font-weight: 500;
+            cursor: pointer;
+            min-width: 180px;
+        }
+        
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--azul-primario);
+        }
+        
+        .filter-counter {
+            padding: 6px 12px;
+            background: var(--azul-primario);
+            color: white;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+        
+        .cleanup-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        /* FORMULARIOS */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--texto-secondary);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--gris-border);
+            border-radius: 12px;
+            font-size: 1rem;
+            color: var(--texto-primary);
+            transition: border-color 0.3s;
+        }
+        
+        .form-input:focus {
+            border-color: #06b6d4;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2);
+        }
+        
+        .form-textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        
+        /* SWITCH TOGGLE */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: var(--verde);
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        /* COLOR PICKER */
+        .color-picker {
+            width: 50px;
+            height: 50px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-right: 12px;
+            padding: 0;
+        }
+        
+        /* COMENTARIOS DEL CLIENTE */
+        .comentarios-cliente {
+            background: #fef3c7;
+            padding: 10px 12px;
+            border-radius: 8px;
+            margin-top: 8px;
+            font-size: 0.875rem;
+            border-left: 4px solid var(--amarillo-primario);
+        }
+        
+        .comentarios-cliente strong {
+            color: var(--amarillo-primario);
+            display: block;
+            margin-bottom: 4px;
+        }
+        
+        /* GRID DE PRODUCTOS */
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+        
+        .product-card {
+            background: var(--blanco);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: var(--sombra);
+            border: 1px solid var(--gris-border);
+        }
+        
+        /* SELECT DE ESTADO MEJORADO */
+        .status-select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            padding: 8px 30px 8px 12px;
+            border: none;
+            border-radius: 20px;
+            font-weight: 600;
+            cursor: pointer;
+            min-width: 160px;
+            font-size: 0.9rem;
+            background-color: var(--azul-primario);
+            color: white;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 12px;
+        }
+        
+        .status-select:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        
+        /* INPUT DE TIEMPO */
+        .time-input {
+            width: 50px;
+            padding: 6px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        
+        .time-input:focus {
+            outline: none;
+            border-color: var(--azul-primario);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        
+        /* BOTONES DE TABLA MEJORADOS */
+        .button-view {
+            background: var(--azul-primario);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .button-view:hover {
+            background: #1e3a8a;
+            transform: translateY(-1px);
+        }
+        
+        /* MODAL */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .modal-content {
+            background: var(--blanco);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: modalSlideIn 0.3s ease;
+        }
+        
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--azul-primario);
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--gris-medio);
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-close:hover {
+            background: var(--gris-claro);
+        }
+        
+        /* TOOLTIPS */
+        [title] {
+            position: relative;
+        }
+        
+        [title]:hover::after {
+            content: attr(title);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            white-space: pre-wrap;
+            max-width: 300px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            margin-bottom: 5px;
+        }
+        
+        /* ANIMACIONES DE NOTIFICACION */
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        @keyframes highlightRow {
+            0% { background-color: #f0f9ff; }
+            100% { background-color: transparent; }
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        /* MEJORAS PARA GRÁFICOS */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            margin-top: 15px;
+        }
+        
+        .chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        
+        .chart-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 8px;
+            z-index: 10;
+        }
+        
+        .chart-error {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #fef2f2;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            border: 2px dashed #fecaca;
+            z-index: 10;
+        }
+        
+        .chart-error i {
+            font-size: 2.5rem;
+            color: #ef4444;
+            margin-bottom: 10px;
+        }
+        
+        .chart-no-data {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            border: 2px dashed #e2e8f0;
+            z-index: 10;
+        }
+        
+        .chart-no-data i {
+            font-size: 2.5rem;
+            color: #cbd5e1;
+            margin-bottom: 10px;
+        }
+        
+        /* ANIMACIONES PARA GRÁFICOS */
+        @keyframes chartFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .chart-container {
+            animation: chartFadeIn 0.5s ease-out;
+        }
+        
+        /* ESTILOS PARA TOOLTIPS PERSONALIZADOS */
+        .custom-tooltip {
+            background: rgba(30, 41, 59, 0.95) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 8px !important;
+            padding: 12px !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
+            backdrop-filter: blur(10px) !important;
+        }
+        
+        .custom-tooltip .tooltip-header {
+            font-weight: 600;
+            color: #f1f5f9;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .custom-tooltip .tooltip-body {
+            color: #cbd5e1;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        
+        /* INDICADOR DE TIEMPO REAL */
+        .realtime-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            animation: pulse 2s infinite;
+        }
+        
+        .realtime-indicator.offline {
+            background: #ef4444;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+            animation: none;
+        }
+        
+        /* BADGE DE NUEVO PEDIDO */
+        .new-order-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ef4444;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 800;
+            animation: pulse 1s infinite;
+        }
+        
+        /* BOTÓN FLOTANTE PARA ACTUALIZAR */
+        .floating-refresh {
+            position: fixed;
+            bottom: 70px;
+            right: 20px;
+            background: var(--azul-primario);
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+            z-index: 100;
+            transition: all 0.3s;
+            border: none;
+        }
+        
+        .floating-refresh:hover {
+            background: #1e3a8a;
+            transform: scale(1.1);
+        }
+        
+        .floating-refresh:active {
+            transform: scale(0.95);
+        }
+        
+        /* NOTIFICACIONES DE SISTEMA */
+        .system-notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e40af;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 10px;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            animation: slideIn 0.3s ease;
+        }
+        
+        .system-notification.error {
+            background: #ef4444;
+        }
+        
+        .system-notification.success {
+            background: #10b981;
+        }
+        
+        .system-notification.warning {
+            background: #f59e0b;
+        }
+        
+        /* RESPONSIVE */
+        @media (max-width: 1024px) {
+            .admin-content {
+                padding: 20px;
+            }
+            
+            .cards-container {
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            }
+            
+            .products-grid {
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            }
+            
+            .chart-container {
+                height: 250px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .login-container {
+                margin: 40px 20px;
+                padding: 30px 20px;
+            }
+            
+            .admin-nav {
+                padding: 12px 20px;
+            }
+            
+            .nav-button {
+                padding: 10px 16px;
+                font-size: 0.875rem;
+            }
+            
+            .admin-content {
+                padding: 16px;
+            }
+            
+            .cards-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .section-title {
+                font-size: 1.5rem;
+            }
+            
+            .table-container {
+                overflow-x: auto;
+            }
+            
+            table {
+                min-width: 1000px;
+            }
+            
+            .filter-controls {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .filter-left {
+                flex-direction: column;
+                align-items: flex-start;
+                width: 100%;
+            }
+            
+            .filter-select {
+                width: 100%;
+            }
+            
+            .cleanup-controls {
+                width: 100%;
+                justify-content: flex-start;
+                flex-wrap: wrap;
+            }
+            
+            .chart-container {
+                height: 200px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .admin-header {
+                padding: 15px 20px;
+                flex-direction: column;
+                gap: 15px;
+                align-items: flex-start;
+            }
+            
+            .admin-user {
+                align-self: flex-end;
+            }
+            
+            .form-actions {
+                flex-direction: column;
+            }
+            
+            .login-links {
+                flex-direction: column;
+                gap: 10px;
+                align-items: center;
+            }
+            
+            .modal-content {
+                padding: 20px;
+            }
+            
+            .chart-container {
+                height: 180px;
+            }
+        }
+        
+        /* UTILITIES */
+        .hidden {
+            display: none !important;
+        }
+        
+        .text-center {
+            text-align: center;
+        }
+        
+        .text-muted {
+            color: var(--gris-medio);
+        }
+        
+        .text-small {
+            font-size: 0.875rem;
+        }
+        
+        .mt-1 { margin-top: 0.5rem; }
+        .mt-2 { margin-top: 1rem; }
+        .mt-3 { margin-top: 1.5rem; }
+        .mb-1 { margin-bottom: 0.5rem; }
+        .mb-2 { margin-bottom: 1rem; }
+        .mb-3 { margin-bottom: 1.5rem; }
+        
+        /* LOADING */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--gris-border);
+            border-top-color: var(--azul-primario);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        
+        /* RESPONSIVE PARA GRÁFICOS */
+        @media (max-width: 768px) {
+            .sales-chart-tooltip {
+                max-width: 200px !important;
+                font-size: 0.8rem !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- PANTALLA DE LOGIN -->
+    <div class="login-container" id="loginContainer">
+        <div class="login-logo">
+            <i class="fas fa-rocket"></i>
+        </div>
+        <h1 class="login-title">AFM Orders</h1>
+        <p class="login-subtitle">Panel de Administración</p>
+        
+        <input type="email" class="login-input" id="emailInput" placeholder="Correo electrónico" autocomplete="username">
+        <input type="password" class="login-input" id="passwordInput" placeholder="Contraseña" autocomplete="current-password">
+        
+        <button class="login-button" id="loginButton">
+            <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+        </button>
+        
+        <div class="login-error" id="loginError">
+            Error al iniciar sesión. Verifica tus credenciales.
+        </div>
+        
+        <div class="login-links">
+            <a href="index.html" class="login-link">
+                <i class="fas fa-store"></i> Volver a la tienda
+            </a>
+        </div>
+    </div>
+    
+    <!-- PANEL DE ADMINISTRACIÓN -->
+    <div class="admin-container" id="adminContainer">
+        <!-- HEADER -->
+        <header class="admin-header">
+            <div class="admin-title">
+                <h1>AFM Orders - Admin</h1>
+                <p id="storeStatus">Cargando estado del local...</p>
+            </div>
+            
+            <div class="admin-user">
+                <div class="user-avatar" id="userAvatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <button class="logout-button" id="logoutButton">
+                    <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                </button>
+            </div>
+        </header>
+        
+        <!-- NAVEGACIÓN -->
+        <nav class="admin-nav">
+            <button class="nav-button active" data-tab="dashboard">
+                <i class="fas fa-chart-bar"></i> Dashboard
+            </button>
+            <button class="nav-button" data-tab="orders">
+                <i class="fas fa-shopping-cart"></i> Pedidos
+                <span id="newOrdersBadge" class="new-order-badge" style="display: none;">!</span>
+            </button>
+            <button class="nav-button" data-tab="products">
+                <i class="fas fa-hamburger"></i> Productos
+            </button>
+            <button class="nav-button" data-tab="categories">
+                <i class="fas fa-folder"></i> Categorías
+            </button>
+            <button class="nav-button" data-tab="settings">
+                <i class="fas fa-cog"></i> Configuración
+            </button>
+            <button class="nav-button" data-tab="reports">
+                <i class="fas fa-chart-line"></i> Reportes
+            </button>
+        </nav>
+        
+        <!-- CONTENIDO PRINCIPAL -->
+        <main class="admin-content">
+            <!-- DASHBOARD -->
+            <div class="tab-content active" id="dashboardTab">
+                <h2 class="section-title">
+                    <i class="fas fa-chart-bar"></i> Dashboard
+                </h2>
+                
+                <div class="cards-container">
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-shopping-cart"></i> Pedidos Hoy
+                        </h3>
+                        <div class="card-value" id="ordersToday">0</div>
+                        <p class="card-subtitle">Total de pedidos recibidos hoy</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-dollar-sign"></i> Ventas Hoy
+                        </h3>
+                        <div class="card-value" id="salesToday">$0</div>
+                        <p class="card-subtitle">Ingresos totales de hoy</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-clock"></i> Pedidos Activos
+                        </h3>
+                        <div class="card-value" id="activeOrders">0</div>
+                        <p class="card-subtitle">En preparación o listos</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-store"></i> Estado Local
+                        </h3>
+                        <div class="card-value" id="storeStatusValue">Cargando...</div>
+                        <p class="card-subtitle">
+                            <label class="switch">
+                                <input type="checkbox" id="storeToggle">
+                                <span class="slider"></span>
+                            </label>
+                            <span id="storeToggleLabel">Abierto</span>
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="cards-container">
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-history"></i> Pedidos Recientes
+                        </h3>
+                        <div id="recentOrdersList" class="mt-2">
+                            <div class="loading">
+                                <div class="loading-spinner"></div>
+                                <p>Cargando pedidos...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-star"></i> Productos Más Vendidos
+                        </h3>
+                        <div id="topProductsList" class="mt-2">
+                            <div class="loading">
+                                <div class="loading-spinner"></div>
+                                <p>Cargando productos...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <h3 class="card-title">
+                        <i class="fas fa-chart-line"></i> Pedidos por Hora (Hoy)
+                    </h3>
+                    <div class="chart-container">
+                        <canvas id="ordersChart"></canvas>
+                        <div id="ordersChartLoading" class="chart-loading" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <p>Cargando gráfico...</p>
+                        </div>
+                        <div id="ordersChartError" class="chart-error" style="display: none;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Error cargando el gráfico</p>
+                        </div>
+                        <div id="ordersChartNoData" class="chart-error" style="display: none; color: #6b7280;">
+                            <i class="fas fa-chart-line"></i>
+                            <p>No hay pedidos hoy</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- PEDIDOS (CON FILTROS MEJORADOS) -->
+            <div class="tab-content" id="ordersTab">
+                <h2 class="section-title">
+                    <i class="fas fa-shopping-cart"></i> Gestión de Pedidos
+                </h2>
+                
+                <!-- CONTROLES DE FILTRO Y LIMPIEZA -->
+                <div class="filter-controls">
+                    <div class="filter-left">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label class="filter-label">Filtrar por:</label>
+                            <select class="filter-select" id="orderFilter">
+                                <option value="hoy">Hoy</option>
+                                <option value="ayer">Ayer</option>
+                                <option value="semana">Esta semana</option>
+                                <option value="mes">Este mes</option>
+                                <option value="pendientes">Pendientes</option>
+                                <option value="completados">Completados</option>
+                                <option value="todos">Todos los pedidos</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-counter" id="filterCounter">
+                            0 pedidos
+                        </div>
+                    </div>
+                    
+                    <div class="cleanup-controls">
+                        <button class="button-danger" id="clearHistoryBtn" title="Elimina pedidos antiguos completados">
+                            <i class="fas fa-broom"></i> Limpiar Historial
+                        </button>
+                        <button class="button-danger-extreme" id="clearAllOrdersBtn" title="PELIGRO: Elimina TODOS los pedidos">
+                            <i class="fas fa-skull-crossbones"></i> Limpiar TODO
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- TABLA DE PEDIDOS -->
+                <div class="table-container">
+                    <table id="ordersTable">
+                        <thead>
+                            <tr>
+                                <th>ID Pedido</th>
+                                <th>Fecha</th>
+                                <th>Cliente</th>
+                                <th>Total</th>
+                                <th>Estado</th>
+                                <th>Tiempo Est.</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ordersTableBody">
+                            <tr>
+                                <td colspan="7" class="text-center">
+                                    <div class="loading">
+                                        <div class="loading-spinner"></div>
+                                        <p>Cargando pedidos...</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- PRODUCTOS -->
+            <div class="tab-content" id="productsTab">
+                <h2 class="section-title">
+                    <i class="fas fa-hamburger"></i> Gestión de Productos
+                </h2>
+                
+                <button class="button-primary mb-3" id="addProductButton">
+                    <i class="fas fa-plus"></i> Agregar Producto
+                </button>
+                
+                <div class="products-grid" id="productsGrid">
+                    <div class="product-card text-center">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            <p>Cargando productos...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- FORMULARIO DE PRODUCTO (OCULTO INICIALMENTE) -->
+                <div class="card hidden" id="productForm">
+                    <div class="modal-header">
+                        <h3 class="modal-title" id="productFormTitle">Nuevo Producto</h3>
+                        <button class="modal-close" id="cancelProductButton">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Nombre del Producto *</label>
+                        <input type="text" class="form-input" id="productName" placeholder="Ej: Hamburguesa Clásica">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Descripción</label>
+                        <textarea class="form-input form-textarea" id="productDescription" placeholder="Describe el producto..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Precio ($) *</label>
+                        <input type="number" class="form-input" id="productPrice" min="0" step="100" placeholder="Ej: 1200">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Categoría *</label>
+                        <select class="form-input" id="productCategory">
+                            <option value="">Seleccionar categoría...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" id="productAvailable" checked> Disponible
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Aderezos que TRAE el producto (texto informativo)</label>
+                        <input type="text" class="form-input" id="productAderezos" placeholder="Ej: Mayonesa, ketchup, lechuga, tomate">
+                        <small class="text-muted">Solo información, no editable por el cliente</small>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button class="button-primary" id="saveProductButton">
+                            <i class="fas fa-save"></i> Guardar Producto
+                        </button>
+                        <button class="button-secondary" id="cancelProductFormButton">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- CATEGORÍAS -->
+            <div class="tab-content" id="categoriesTab">
+                <h2 class="section-title">
+                    <i class="fas fa-folder"></i> Gestión de Categorías
+                </h2>
+                
+                <div class="products-grid" id="categoriesGrid">
+                    <div class="product-card text-center">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            <p>Cargando categorías...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <h3 class="card-title" id="categoryFormTitle">
+                        <i class="fas fa-plus"></i> Agregar Nueva Categoría
+                    </h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Nombre de la Categoría *</label>
+                        <input type="text" class="form-input" id="categoryName" placeholder="Ej: Hamburguesas, Bebidas...">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Orden de Visualización</label>
+                        <input type="number" class="form-input" id="categoryOrder" min="1" value="1">
+                        <small class="text-muted">Menor número = aparece primero</small>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button class="button-primary" id="addCategoryButton">
+                            <i class="fas fa-plus"></i> Agregar Categoría
+                        </button>
+                        <button class="button-secondary hidden" id="cancelEditCategoryButton">
+                            Cancelar Edición
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- CONFIGURACIÓN -->
+            <div class="tab-content" id="settingsTab">
+                <h2 class="section-title">
+                    <i class="fas fa-cog"></i> Configuración del Local
+                </h2>
+                
+                <div class="cards-container">
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-info-circle"></i> Información Básica
+                        </h3>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Nombre del Local *</label>
+                            <input type="text" class="form-input" id="storeName" placeholder="AFM Orders">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Teléfono WhatsApp *</label>
+                            <input type="text" class="form-input" id="whatsappPhone" placeholder="5491122334455">
+                            <small class="text-muted">Formato: 549 + código área + número (sin + ni espacios)</small>
+                        </div>
+                        
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-clock"></i> Horarios
+                        </h3>
+                        
+                        <div id="hoursContainer">
+                            <!-- Los horarios se generarán dinámicamente -->
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Mensaje cuando está Cerrado</label>
+                            <textarea class="form-input form-textarea" id="closedMessage"></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="cards-container mt-3">
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-motorcycle"></i> Envíos y Retiro
+                        </h3>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Precio de Envío ($)</label>
+                            <input type="number" class="form-input" id="deliveryPrice" min="0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Tiempo Base Estimado (minutos) *</label>
+                            <input type="number" class="form-input" id="baseDeliveryTime" min="1">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">
+                                <input type="checkbox" id="retiroEnabled" checked> Retiro en local habilitado
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">
+                                <input type="checkbox" id="envioEnabled" checked> Envío a domicilio habilitado
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-palette"></i> Colores de la Marca
+                        </h3>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Color Principal (Azul)</label>
+                            <input type="color" class="color-picker" id="colorPrimary" value="#1e40af">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Color Secundario (Amarillo)</label>
+                            <input type="color" class="color-picker" id="colorSecondary" value="#f59e0b">
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="button-primary mt-3" id="saveSettingsButton">
+                    <i class="fas fa-save"></i> Guardar Configuración
+                </button>
+            </div>
+            
+            <!-- REPORTES -->
+            <div class="tab-content" id="reportsTab">
+                <h2 class="section-title">
+                    <i class="fas fa-chart-line"></i> Reportes y Estadísticas
+                </h2>
+                
+                <div class="cards-container">
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-chart-bar"></i> Generar Reporte
+                        </h3>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Período</label>
+                            <select class="form-input" id="reportPeriod">
+                                <option value="today">Hoy</option>
+                                <option value="yesterday">Ayer</option>
+                                <option value="week">Esta Semana</option>
+                                <option value="month">Este Mes</option>
+                                <option value="custom">Personalizado</option>
+                            </select>
+                        </div>
+                        
+                        <div id="customDateRange" class="hidden">
+                            <div class="form-group">
+                                <label class="form-label">Desde</label>
+                                <input type="date" class="form-input" id="reportDateFrom">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Hasta</label>
+                                <input type="date" class="form-input" id="reportDateTo">
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button class="button-primary" id="generateReportButton">
+                                <i class="fas fa-chart-bar"></i> Generar Reporte
+                            </button>
+                            <button class="button-secondary" id="exportCSVButton">
+                                <i class="fas fa-file-export"></i> Exportar CSV
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">
+                            <i class="fas fa-file-alt"></i> Resumen del Reporte
+                        </h3>
+                        <div id="reportSummary" class="mt-2">
+                            <p class="text-muted">Selecciona un período y genera el reporte.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <h3 class="card-title">
+                        <i class="fas fa-chart-line"></i> Gráfico de Ventas
+                    </h3>
+                    <div class="chart-container">
+                        <canvas id="salesChart"></canvas>
+                        <div id="salesChartLoading" class="chart-loading" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <p>Cargando gráfico...</p>
+                        </div>
+                        <div id="salesChartError" class="chart-error" style="display: none;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Error cargando el gráfico</p>
+                        </div>
+                        <div id="salesChartNoData" class="chart-no-data">
+                            <i class="fas fa-chart-bar"></i>
+                            <p>No hay datos para mostrar</p>
+                            <p style="font-size: 0.9rem; color: #9ca3af; margin-top: 5px;">
+                                Genera un reporte para ver las ventas
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- MODAL PARA DETALLES DEL PEDIDO -->
+    <div class="modal-overlay" id="orderModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalOrderId"></h3>
+                <button class="modal-close" id="closeModalButton">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="modalOrderDetails"></div>
+            <div class="form-actions mt-3">
+                <button class="button-secondary" id="closeModalBtn">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTÓN FLOTANTE PARA ACTUALIZAR -->
+    <button class="floating-refresh" id="floatingRefresh" title="Actualizar pedidos">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+
+    <!-- SONIDOS PARA NOTIFICACIONES -->
+    <audio id="newOrderSound" preload="auto" style="display:none;">
+        <source src="SD_ALERT_3.mp3" type="audio/mpeg">
+    </audio>
+
+    <!-- SCRIPTS -->
+    <script src="admin-app.js"></script>
+    
+    <!-- Inicializar Supabase y Admin -->
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('🚀 Inicializando Panel Admin...');
+            
+            // Inicializar Supabase primero
+            await initSupabase();
+            
+            // Luego inicializar la app del admin
+            if (typeof initAdminApp === 'function') {
+                await initAdminApp();
+            }
+            
+            console.log('✅ Panel Admin cargado');
+            
+            // Configurar eventos básicos de modales
+            setupBasicEventListeners();
+            
+            // Crear indicador de tiempo real
+            createRealtimeIndicator();
+            
+            // Iniciar actualización de fecha/hora
+            updateDateTime();
+        });
+        
+        // Cerrar modal al hacer clic fuera
+        function setupBasicEventListeners() {
+            const orderModal = document.getElementById('orderModal');
+            if (orderModal) {
+                orderModal.addEventListener('click', function(e) {
+                    if (e.target === orderModal) {
+                        orderModal.style.display = 'none';
+                    }
+                });
+            }
+            
+            const productModal = document.getElementById('productModal');
+            if (productModal) {
+                productModal.addEventListener('click', function(e) {
+                    if (e.target === productModal) {
+                        productModal.style.display = 'none';
+                    }
+                });
+            }
+            
+            const categoryModal = document.getElementById('categoryModal');
+            if (categoryModal) {
+                categoryModal.addEventListener('click', function(e) {
+                    if (e.target === categoryModal) {
+                        categoryModal.style.display = 'none';
+                    }
+                });
+            }
+            
+            // Prevenir envío de formularios
+            document.querySelectorAll('form').forEach(function(form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                });
+            });
+            
+            // Eventos de botones
+            const cancelProductFormButton = document.getElementById('cancelProductFormButton');
+            if (cancelProductFormButton) {
+                cancelProductFormButton.addEventListener('click', function() {
+                    const form = document.getElementById('productForm');
+                    if (form) form.classList.add('hidden');
+                });
+            }
+            
+            const cancelProductButton = document.getElementById('cancelProductButton');
+            if (cancelProductButton) {
+                cancelProductButton.addEventListener('click', function() {
+                    const form = document.getElementById('productForm');
+                    if (form) form.classList.add('hidden');
+                });
+            }
+            
+            const cancelEditCategoryButton = document.getElementById('cancelEditCategoryButton');
+            if (cancelEditCategoryButton) {
+                cancelEditCategoryButton.addEventListener('click', function() {
+                    if (window.cancelEditCategory) window.cancelEditCategory();
+                });
+            }
+            
+            const reportPeriod = document.getElementById('reportPeriod');
+            if (reportPeriod) {
+                reportPeriod.addEventListener('change', function() {
+                    const customRange = document.getElementById('customDateRange');
+                    if (customRange) {
+                        customRange.classList.toggle('hidden', this.value !== 'custom');
+                    }
+                });
+            }
+            
+            const exportCSVButton = document.getElementById('exportCSVButton');
+            if (exportCSVButton) {
+                exportCSVButton.addEventListener('click', function() {
+                    alert('Función de exportación a CSV será implementada en la próxima versión.');
+                });
+            }
+            
+            const floatingRefresh = document.getElementById('floatingRefresh');
+            if (floatingRefresh) {
+                floatingRefresh.addEventListener('click', function() {
+                    if (window.forceRefreshOrders) window.forceRefreshOrders();
+                });
+            }
+        }
+        
+        // Crear indicador de estado de tiempo real
+        function createRealtimeIndicator() {
+            const indicator = document.createElement('div');
+            indicator.id = 'realtimeIndicator';
+            indicator.className = 'realtime-indicator';
+            indicator.innerHTML = '<i class="fas fa-circle"></i><span>Tiempo real activo</span>';
+            document.body.appendChild(indicator);
+            
+            setInterval(function() {
+                updateRealtimeIndicator();
+            }, 5000);
+        }
+        
+        // Actualizar indicador de tiempo real
+        function updateRealtimeIndicator() {
+            const indicator = document.getElementById('realtimeIndicator');
+            if (!indicator) return;
+            
+            var isOnline = navigator.onLine;
+            indicator.className = 'realtime-indicator ' + (isOnline ? 'online' : 'offline');
+            indicator.querySelector('span').textContent = isOnline ? 'Tiempo real activo' : 'Sin conexión';
+        }
+        
+        // Mostrar fecha y hora actual
+        function updateDateTime() {
+            var now = new Date();
+            var dateTimeStr = now.toLocaleDateString('es-ES', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            var dateTimeElement = document.getElementById('currentDateTime');
+            if (dateTimeElement) {
+                dateTimeElement.textContent = dateTimeStr;
+            }
+            
+            setInterval(updateDateTime, 1000);
+        }
+        
+        // Funciones globales
+        window.updateNewOrdersBadge = function(count) {
+            var badge = document.getElementById('newOrdersBadge');
+            if (!badge) return;
+            
+            if (count > 0) {
+                badge.textContent = count > 9 ? '9+' : count;
+                badge.style.display = 'flex';
+                badge.style.animation = 'pulse 1s infinite';
+            } else {
+                badge.style.display = 'none';
+            }
+        };
+        
+        window.showChartLoading = function(chartId) {
+            var canvas = document.getElementById(chartId);
+            if (canvas) canvas.style.display = 'none';
+        };
+        
+        window.showChartError = function(chartId, error) {
+            console.error('Error en chart ' + chartId + ':', error);
+        };
+        
+        window.showChartNoData = function(chartId, show) {
+            show = show !== false;
+            var noDataElement = document.getElementById(chartId + 'NoData');
+            var canvasElement = document.getElementById(chartId);
+            
+            if (noDataElement) noDataElement.style.display = show ? 'flex' : 'none';
+            if (canvasElement) canvasElement.style.display = show ? 'none' : 'block';
+        };
+    </script>
+    
+    <!-- Service Worker for PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(function(reg) { console.log('Service Worker registrado:', reg.scope); })
+                    .catch(function(err) { console.log('Error Service Worker:', err); });
+            });
+        }
+    </script>
+</body>
+</html>
